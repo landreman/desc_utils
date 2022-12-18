@@ -73,3 +73,49 @@ def test_magwell_resolution():
 
         results = np.array(results)
         np.testing.assert_allclose(results, np.mean(results), rtol=0.002)
+
+
+def test_magwell_value():
+    """
+    Confirm the specific value of the magnetic well objective function.
+
+    For the Landreman & Paul QA, (d^2 V / d s^2) / V is ~ 0.03 at all radii.
+    """
+    filename = ".//tests//inputs//LandremanPaul2022_QA_reactorScale_lowRes.h5"
+
+    eq = desc.io.load(filename)
+    grid = QuadratureGrid(
+        L=8,
+        M=8,
+        N=8,
+        NFP=eq.NFP,
+    )
+
+    def test(threshold):
+        obj = ObjectiveFunction(
+            MagneticWellThreshold(
+                grid=grid,
+                threshold=threshold,
+            ),
+            eq,
+        )
+        scalar_objective = obj.compute_scalar(obj.x(eq))
+        print(f"obj: {scalar_objective:11.9g}  threshold: {threshold}")
+
+        if threshold > 0.03:
+            assert scalar_objective < 1e-15
+        else:
+            expected = 0.5 * (0.03 - threshold) ** 2
+            rel_diff = abs(
+                (scalar_objective - expected) / (0.5 * (scalar_objective + threshold))
+            )
+            print(f"  expected: {expected}  rel diff: {rel_diff}")
+            np.testing.assert_allclose(
+                scalar_objective, 0.5 * (0.03 - threshold) ** 2, rtol=0.013
+            )
+
+        return scalar_objective
+
+    thresholds = [0, 0.06, -0.06, 0.12, -0.12]
+    for threshold in thresholds:
+        test(threshold)
