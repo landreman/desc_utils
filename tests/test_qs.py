@@ -65,3 +65,56 @@ def test_quasisymmetry_resolution():
 
         results = np.array(results)
         np.testing.assert_allclose(results, np.mean(results), rtol=1e-4)
+
+
+def test_QA_QH():
+    """
+    The QA residual for QA should be small, and the QH residual for QH should be small
+    """
+    filenames = [
+        ".//tests//inputs//LandremanPaul2022_QA_reactorScale_lowRes.h5",
+        ".//tests//inputs//LandremanPaul2022_QH_reactorScale_lowRes.h5",
+    ]
+
+    def test(eq, helicity_n):
+        grid = QuadratureGrid(
+            L=8,
+            M=8,
+            N=8,
+            NFP=eq.NFP,
+        )
+        obj = ObjectiveFunction(
+            QuasisymmetryTwoTermNormalized(
+                grid=grid,
+                helicity=(1, helicity_n * eq.NFP),
+            ),
+            eq,
+        )
+        scalar_objective = obj.compute_scalar(obj.x(eq))
+        print(
+            f"obj: {scalar_objective:11.9g}  file: {filename}  helicity_n: {helicity_n}"
+        )
+        return scalar_objective
+
+    results = []
+    for filename in filenames:
+        eq = desc.io.load(filename)
+        for helicity_n in [-1, 0, 1]:
+            results.append(test(eq, helicity_n))
+
+    results = np.array(results)
+    print(results)
+
+    # For the QA config, helicity = 0 should give the lowest residual:
+    assert results[1] < results[0] * 1e-6
+    assert results[1] < results[2] * 1e-6
+
+    # For the QH config, helicity = -1 should give the lowest residual:
+    assert results[3] < results[4] * 2e-5
+    assert results[3] < results[5] * 2e-5
+
+    # For the QA objective, the QA config should have lower residual than the QH config:
+    assert results[1] < results[4] * 1e-7
+
+    # For the QH objective, the QH config should have lower residual than the QA config:
+    assert results[3] < results[0] * 2e-4
