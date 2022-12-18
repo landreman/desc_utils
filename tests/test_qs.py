@@ -16,10 +16,12 @@ def test_quasisymmetry_resolution():
     Confirm that the quasisymmetry objective function is
     approximately independent of grid resolution.
     """
-    filename = ".//tests//inputs//HELIOTRON_MJL.h5"
-    eq = desc.io.load(filename)
+    filenames = [
+        ".//tests//inputs//HELIOTRON_MJL.h5",
+        ".//tests//inputs//HELIOTRON_MJL_current.h5",
+    ]
 
-    def test(grid_type, kwargs, L, M, N, helicity_N):
+    def test(eq, grid_type, kwargs, L, M, N, helicity_N):
         grid = grid_type(
             L=L,
             M=M,
@@ -57,14 +59,17 @@ def test_quasisymmetry_resolution():
     # Ms = [16, 16, 32, 16]
     # Ns = [16, 16, 16, 32]
 
-    for helicity_N in [0, eq.NFP, -eq.NFP]:
-        results = []
-        for grid_type, kwargs in zip(grid_types, kwargss):
-            for L, M, N in zip(Ls, Ms, Ns):
-                results.append(test(grid_type, kwargs, L, M, N, helicity_N))
+    for filename in filenames:
+        print("********* Processing file", filename, "*********")
+        eq = desc.io.load(filename)
+        for helicity_N in [0, eq.NFP, -eq.NFP]:
+            results = []
+            for grid_type, kwargs in zip(grid_types, kwargss):
+                for L, M, N in zip(Ls, Ms, Ns):
+                    results.append(test(eq, grid_type, kwargs, L, M, N, helicity_N))
 
-        results = np.array(results)
-        np.testing.assert_allclose(results, np.mean(results), rtol=1e-4)
+            results = np.array(results)
+            np.testing.assert_allclose(results, np.mean(results), rtol=1e-3)
 
 
 def test_QA_QH():
