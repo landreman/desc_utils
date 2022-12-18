@@ -28,6 +28,12 @@ class QuasisymmetryTwoTermNormalized(_Objective):
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
     helicity : tuple, optional
@@ -39,25 +45,30 @@ class QuasisymmetryTwoTermNormalized(_Objective):
 
     _scalar = False
     _linear = False
+    _units = "(dimensionless)"
+    _print_value_fmt = "Quasisymmetry error: {:10.3e} "
 
     def __init__(
         self,
         eq=None,
         target=0,
         weight=1,
+        normalize=False,
+        normalize_target=False,
         grid=None,
         helicity=(1, 0),
         name="QS two-term normalized",
     ):
 
         self.grid = grid
-        self.helicity = helicity
-        super().__init__(eq=eq, target=target, weight=weight, name=name)
-        units = ""
-        self._print_value_fmt = (
-            "Quasi-symmetry ({},{}) error: ".format(self.helicity[0], self.helicity[1])
-            + "{:10.3e} "
-            + units
+        self._helicity = helicity
+        super().__init__(
+            eq=eq,
+            target=target,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
         )
 
     def build(self, eq, use_jit=True, verbose=1):
@@ -74,7 +85,9 @@ class QuasisymmetryTwoTermNormalized(_Objective):
 
         """
         if self.grid is None:
-            self.grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
+            self.grid = QuadratureGrid(
+                L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym
+            )
 
         self._dim_f = self.grid.num_nodes
 
@@ -161,21 +174,3 @@ class QuasisymmetryTwoTermNormalized(_Objective):
     def helicity(self):
         """tuple: Type of quasi-symmetry (M, N)."""
         return self._helicity
-
-    @helicity.setter
-    def helicity(self, helicity):
-        assert (
-            (len(helicity) == 2)
-            and (int(helicity[0]) == helicity[0])
-            and (int(helicity[1]) == helicity[1])
-        )
-        self._helicity = helicity
-        if hasattr(self, "_print_value_fmt"):
-            units = ""
-            self._print_value_fmt = (
-                "Quasi-symmetry ({},{}) error: ".format(
-                    self.helicity[0], self.helicity[1]
-                )
-                + "{:10.3e} "
-                + units
-            )
