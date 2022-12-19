@@ -12,9 +12,11 @@ from desc.utils import Timer
 
 
 class MagneticWellThreshold(_Objective):
-    """d^2 volume / d psi^2 objective
+    r"""d^2 volume / d psi^2 objective
 
     \int_0^1 d\rho max(0, (d^2 volume / d s^2) / V - threshold)^2
+
+    where s = \rho^2.
 
     Parameters
     ----------
@@ -87,7 +89,7 @@ class MagneticWellThreshold(_Objective):
                 L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP
             )
 
-        self._dim_f = self.grid.num_nodes
+        self._dim_f = self.grid.num_rho
 
         timer = Timer()
         if verbose > 0:
@@ -124,12 +126,14 @@ class MagneticWellThreshold(_Objective):
         """
         data = compute_geometry(R_lmn, Z_lmn, self._R_transform, self._Z_transform)
         data = compute_flux_coords(self.grid, data=data)
+        rho_weights = compress(self.grid, self.grid.spacing[:, 0])
 
-        d2_volume_d_s2 = (data["V_rr(r)"] - data["V_r(r)"] / data["rho"]) / (
-            4 * data["rho"] ** 2
+        d2_volume_d_s2 = compress(
+            self.grid,
+            (data["V_rr(r)"] - data["V_r(r)"] / data["rho"]) / (4 * data["rho"] ** 2),
         )
         residuals = jnp.maximum(
             0.0, d2_volume_d_s2 / data["V"] - self.threshold
-        ) * jnp.sqrt(self.grid.weights / (4 * jnp.pi * jnp.pi))
+        ) * jnp.sqrt(rho_weights)
 
         return self._shift_scale(residuals)
