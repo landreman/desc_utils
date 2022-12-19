@@ -111,7 +111,7 @@ def test_magwell_value():
             )
             print(f"  expected: {expected}  rel diff: {rel_diff}")
             np.testing.assert_allclose(
-                scalar_objective, 0.5 * (0.03 - threshold) ** 2, rtol=0.013
+                scalar_objective, expected, rtol=0.013
             )
 
         return scalar_objective

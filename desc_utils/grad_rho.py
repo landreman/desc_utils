@@ -1,7 +1,8 @@
 from desc.backend import jnp
 from desc.compute import (
-    compute_flux_coords,
     compute_geometry,
+    compute_jacobian,
+    compute_contravariant_metric_coefficients,
     data_index,
 )
 from desc.compute.utils import compress
@@ -10,12 +11,11 @@ from desc.transform import Transform
 from desc.utils import Timer
 
 
-class MagneticWellThreshold(_Objective):
-    r"""d^2 volume / d psi^2 objective
+class GradRho(_Objective):
+    """objective to control elongation.
 
-    \int_0^1 d\rho max(0, (d^2 volume / d s^2) / V - threshold)^2
-
-    where s = \rho^2.
+    f = (1/2) * < max[0, a * |grad rho| - k] ** 2>
+    where k is a constant threshold, and < .. > is a flux surface average.
 
     Parameters
     ----------
@@ -38,14 +38,14 @@ class MagneticWellThreshold(_Objective):
     name : str
         Name of the objective function.
     threshold: float
-        Set to a negative number to provide some margin
+        k in the formula above
 
     """
 
-    _scalar = True
+    _scalar = False
     _linear = False
     _units = "(dimensionless)"
-    _print_value_fmt = "Magnetic well objective: {:10.3e} "
+    print_value_fmt = "|grad rho| penalty: {:10.3e} "
 
     def __init__(
         self,
@@ -54,12 +54,14 @@ class MagneticWellThreshold(_Objective):
         weight=1,
         normalize=False,
         normalize_target=False,
-        grid=None,
-        name="V''(s)",
+        vol_grid=None,
+        surf_grid=None,
+        name="|grad rho|",
         threshold=0.0,
     ):
 
-        self.grid = grid
+        self.surf_grid = surf_grid
+        self.vol_grid = vol_grid
         self.threshold = threshold
         super().__init__(
             eq=eq,
@@ -83,23 +85,37 @@ class MagneticWellThreshold(_Objective):
             Level of output.
 
         """
-        if self.grid is None:
-            self.grid = QuadratureGrid(
+        if self.surf_grid is None:
+            self.surf_grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, rho=[1.0], NFP=eq.NFP)
+        if self.vol_grid is None:
+            self.vol_grid = QuadratureGrid(
                 L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP
             )
 
-        self._dim_f = self.grid.num_rho
+        self._dim_f = self.surf_grid.num_nodes
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._R_transform = Transform(
-            self.grid, eq.R_basis, derivs=data_index["V_rr(r)"]["R_derivs"], build=True
+        self._surf_R_transform = Transform(
+            self.surf_grid,
+            eq.R_basis,
+            derivs=data_index["|grad(rho)|"]["R_derivs"],
+            build=True,
         )
-        self._Z_transform = Transform(
-            self.grid, eq.Z_basis, derivs=data_index["V_rr(r)"]["R_derivs"], build=True
+        self._surf_Z_transform = Transform(
+            self.surf_grid,
+            eq.Z_basis,
+            derivs=data_index["|grad(rho)|"]["R_derivs"],
+            build=True,
+        )
+        self._vol_R_transform = Transform(
+            self.vol_grid, eq.R_basis, derivs=data_index["a"]["R_derivs"], build=True
+        )
+        self._vol_Z_transform = Transform(
+            self.vol_grid, eq.Z_basis, derivs=data_index["a"]["R_derivs"], build=True
         )
 
         timer.stop("Precomputing transforms")
@@ -123,16 +139,19 @@ class MagneticWellThreshold(_Objective):
         V : float
 
         """
-        data = compute_geometry(R_lmn, Z_lmn, self._R_transform, self._Z_transform)
-        data = compute_flux_coords(self.grid, data=data)
-        rho_weights = compress(self.grid, self.grid.spacing[:, 0])
-
-        d2_volume_d_s2 = compress(
-            self.grid,
-            (data["V_rr(r)"] - data["V_r(r)"] / data["rho"]) / (4 * data["rho"] ** 2),
+        surf_data = compute_jacobian(
+            R_lmn, Z_lmn, self._surf_R_transform, self._surf_Z_transform
         )
-        residuals = jnp.maximum(
-            0.0, d2_volume_d_s2 / data["V"] - self.threshold
-        ) * jnp.sqrt(rho_weights)
+        surf_data = compute_contravariant_metric_coefficients(
+            R_lmn, Z_lmn, self._surf_R_transform, self._surf_Z_transform, data=surf_data
+        )
+        vol_data = compute_geometry(
+            R_lmn, Z_lmn, self._vol_R_transform, self._vol_Z_transform
+        )
+
+        Vprime = jnp.sum(self.surf_grid.weights * surf_data["sqrt(g)"])
+        residuals = jnp.sqrt(
+            self.surf_grid.weights * surf_data["sqrt(g)"] / Vprime
+        ) * jnp.maximum(0.0, vol_data["a"] * surf_data["|grad(rho)|"] - self.threshold)
 
         return self._shift_scale(residuals)
