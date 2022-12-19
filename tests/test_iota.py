@@ -1,0 +1,99 @@
+"""Tests for objectives related to iota."""
+
+import numpy as np
+import pytest
+
+import desc.io
+from desc.grid import LinearGrid, QuadratureGrid
+from desc.optimize import Optimizer
+from desc.objectives import *
+
+from desc_utils import MeanIota
+
+
+def test_mean_iota_resolution():
+    """
+    Confirm that the MeanIota objective function is
+    approximately independent of grid resolution.
+    """
+    filenames = [
+        ".//tests//inputs//LandremanPaul2022_QA_reactorScale_lowRes.h5",
+        ".//tests//inputs//HELIOTRON_MJL.h5",
+    ]
+
+    def test(eq, L, M, N):
+        grid = QuadratureGrid(
+            L=L,
+            M=M,
+            N=N,
+            NFP=eq.NFP,
+        )
+        obj = ObjectiveFunction(
+            MeanIota(
+                grid=grid,
+                target=0.6,
+            ),
+            eq,
+        )
+        scalar_objective = obj.compute_scalar(obj.x(eq))
+        print(f"obj: {scalar_objective:11.9g}  L: {L}  M: {M}  N: {N}")
+        return scalar_objective
+
+    # Loop over grid resolutions:
+    # Ls = [8, 16, 8, 16, 8]
+    # Ms = [8, 8, 16, 16, 8]
+    # Ns = [8, 8, 8, 8, 16]
+
+    Ls = [16, 32, 16, 32, 16]
+    Ms = [16, 16, 32, 32, 16]
+    Ns = [16, 16, 16, 16, 32]
+
+    for filename in filenames:
+        print("********* Processing file", filename, "*********")
+        eq = desc.io.load(filename)
+        results = []
+        for L, M, N in zip(Ls, Ms, Ns):
+            results.append(test(eq, L, M, N))
+
+        results = np.array(results)
+        np.testing.assert_allclose(results, np.mean(results), rtol=1e-2)
+
+
+def test_mean_iota_value():
+    """ """
+    filename = ".//tests//inputs//LandremanPaul2022_QA_reactorScale_lowRes.h5"
+    print(filename)
+    eq = desc.io.load(filename)
+
+    grid = QuadratureGrid(
+        L=16,
+        M=16,
+        N=16,
+        NFP=eq.NFP,
+    )
+
+    def test(target):
+        obj = ObjectiveFunction(
+            MeanIota(
+                grid=grid,
+                target=target,
+            ),
+            eq,
+        )
+        scalar_objective = obj.compute_scalar(obj.x(eq))
+
+        expected = 0.5 * (0.42 - target) ** 2
+        rel_diff = abs(
+            (scalar_objective - expected) / (0.5 * (scalar_objective + target))
+        )
+        print(
+            f"target: {target}  obj: {scalar_objective:11.9g}  "
+            f"expected: {expected}  rel diff: {rel_diff}"
+        )
+        np.testing.assert_allclose(scalar_objective, expected, rtol=1e-2)
+
+        return scalar_objective
+
+    targets = [-0.6, 0, 0.7]
+    for target in targets:
+        test(target)
