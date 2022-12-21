@@ -8,7 +8,7 @@ from desc.grid import LinearGrid, QuadratureGrid
 from desc.optimize import Optimizer
 from desc.objectives import *
 
-from desc_utils import MeanIota
+from desc_utils import MeanIota, IotaAt
 
 
 def test_mean_iota_resolution():
@@ -75,6 +75,93 @@ def test_mean_iota_value():
     def test(target):
         obj = ObjectiveFunction(
             MeanIota(
+                grid=grid,
+                target=target,
+            ),
+            eq,
+        )
+        scalar_objective = obj.compute_scalar(obj.x(eq))
+
+        expected = 0.5 * (0.42 - target) ** 2
+        rel_diff = abs(
+            (scalar_objective - expected) / (0.5 * (scalar_objective + target))
+        )
+        print(
+            f"target: {target}  obj: {scalar_objective:11.9g}  "
+            f"expected: {expected}  rel diff: {rel_diff}"
+        )
+        np.testing.assert_allclose(scalar_objective, expected, rtol=1e-2)
+
+        return scalar_objective
+
+    targets = [-0.6, 0, 0.7]
+    for target in targets:
+        test(target)
+
+
+def test_iota_at_resolution():
+    """
+    Confirm that the IotaAt objective function is
+    approximately independent of grid resolution.
+    """
+    filenames = [
+        ".//tests//inputs//LandremanPaul2022_QA_reactorScale_lowRes.h5",
+        ".//tests//inputs//HELIOTRON_MJL.h5",
+    ]
+
+    def test(eq, M, N):
+        grid = LinearGrid(
+            rho=0.6,
+            M=M,
+            N=N,
+            NFP=eq.NFP,
+        )
+        obj = ObjectiveFunction(
+            IotaAt(
+                grid=grid,
+                target=0.6,
+            ),
+            eq,
+        )
+        scalar_objective = obj.compute_scalar(obj.x(eq))
+        print(f"obj: {scalar_objective:11.9g}  M: {M}  N: {N}")
+        return scalar_objective
+
+    # Loop over grid resolutions:
+    # Ls = [8, 16, 8, 16, 8]
+    # Ms = [8, 8, 16, 16, 8]
+    # Ns = [8, 8, 8, 8, 16]
+
+    Ms = [16, 32, 16]
+    Ns = [16, 16, 32]
+
+    for filename in filenames:
+        print("********* Processing file", filename, "*********")
+        eq = desc.io.load(filename)
+        results = []
+        for M, N in zip(Ms, Ns):
+            results.append(test(eq, M, N))
+
+        results = np.array(results)
+        np.testing.assert_allclose(results, np.mean(results), rtol=1e-2)
+
+
+def test_iota_at_value():
+    """ """
+    filename = ".//tests//inputs//LandremanPaul2022_QA_reactorScale_lowRes.h5"
+    print(filename)
+    eq = desc.io.load(filename)
+
+    grid = LinearGrid(
+        rho=0.5,
+        M=16,
+        N=16,
+        NFP=eq.NFP,
+    )
+
+    def test(target):
+        obj = ObjectiveFunction(
+            IotaAt(
                 grid=grid,
                 target=target,
             ),
