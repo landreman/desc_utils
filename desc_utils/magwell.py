@@ -2,7 +2,8 @@ from desc.backend import jnp
 from desc.compute import (
     compute_flux_coords,
     compute_geometry,
-    data_index,
+    get_profiles,
+    get_transforms,
 )
 from desc.compute.utils import compress
 from desc.objectives.objective_funs import _Objective
@@ -89,18 +90,15 @@ class MagneticWellThreshold(_Objective):
             )
 
         self._dim_f = self.grid.num_rho
+        self._data_keys = ["V_rr(r)", "V_r(r)", "rho", "V"]
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._R_transform = Transform(
-            self.grid, eq.R_basis, derivs=data_index["V_rr(r)"]["R_derivs"], build=True
-        )
-        self._Z_transform = Transform(
-            self.grid, eq.Z_basis, derivs=data_index["V_rr(r)"]["R_derivs"], build=True
-        )
+        self._profiles = get_profiles(*self._data_keys, eq=eq, grid=self.grid)
+        self._transforms = get_transforms(*self._data_keys, eq=eq, grid=self.grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -123,8 +121,21 @@ class MagneticWellThreshold(_Objective):
         V : float
 
         """
-        data = compute_geometry(R_lmn, Z_lmn, self._R_transform, self._Z_transform)
-        data = compute_flux_coords(self.grid, data=data)
+        params = {
+            "R_lmn": R_lmn,
+            "Z_lmn": Z_lmn,
+        }
+        data = compute_geometry(
+            params,
+            self._transforms,
+            self._profiles,
+        )
+        data = compute_flux_coords(
+            params,
+            self._transforms,
+            self._profiles,
+            data=data,
+        )
         rho_weights = compress(self.grid, self.grid.spacing[:, 0])
 
         d2_volume_d_s2 = compress(

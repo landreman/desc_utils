@@ -3,7 +3,8 @@
 from desc.backend import jnp
 from desc.compute import (
     compute_rotational_transform,
-    data_index,
+    get_profiles,
+    get_transforms,
 )
 from desc.compute.utils import compress
 from desc.grid import LinearGrid, QuadratureGrid
@@ -89,30 +90,15 @@ class MeanIota(_Objective):
             )
 
         self._dim_f = 1
+        self._data_keys = ["iota"]
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        if eq.iota is not None:
-            self._iota = eq.iota.copy()
-            self._iota.grid = self.grid
-            self._current = None
-        else:
-            self._current = eq.current.copy()
-            self._current.grid = self.grid
-            self._iota = None
-
-        self._R_transform = Transform(
-            self.grid, eq.R_basis, derivs=data_index["iota"]["R_derivs"], build=True
-        )
-        self._Z_transform = Transform(
-            self.grid, eq.Z_basis, derivs=data_index["iota"]["R_derivs"], build=True
-        )
-        self._L_transform = Transform(
-            self.grid, eq.L_basis, derivs=data_index["iota"]["L_derivs"], build=True
-        )
+        self._profiles = get_profiles(*self._data_keys, eq=eq, grid=self.grid)
+        self._transforms = get_transforms(*self._data_keys, eq=eq, grid=self.grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -143,18 +129,18 @@ class MeanIota(_Objective):
         iota : ndarray
             rotational transform on specified flux surfaces.
         """
+        params = {
+            "R_lmn": R_lmn,
+            "Z_lmn": Z_lmn,
+            "L_lmn": L_lmn,
+            "i_l": i_l,
+            "c_l": c_l,
+            "Psi": Psi,
+        }
         data = compute_rotational_transform(
-            R_lmn,
-            Z_lmn,
-            L_lmn,
-            i_l,
-            c_l,
-            Psi,
-            self._R_transform,
-            self._Z_transform,
-            self._L_transform,
-            self._iota,
-            self._current,
+            params,
+            self._transforms,
+            self._profiles,
         )
         mean_iota = jnp.sum(
             compress(
@@ -249,30 +235,15 @@ class IotaAt(_Objective):
             raise ValueError("For IotaAt, grid should be a LinearGrid.")
 
         self._dim_f = 1
+        self._data_keys = ["iota"]
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        if eq.iota is not None:
-            self._iota = eq.iota.copy()
-            self._iota.grid = self.grid
-            self._current = None
-        else:
-            self._current = eq.current.copy()
-            self._current.grid = self.grid
-            self._iota = None
-
-        self._R_transform = Transform(
-            self.grid, eq.R_basis, derivs=data_index["iota"]["R_derivs"], build=True
-        )
-        self._Z_transform = Transform(
-            self.grid, eq.Z_basis, derivs=data_index["iota"]["R_derivs"], build=True
-        )
-        self._L_transform = Transform(
-            self.grid, eq.L_basis, derivs=data_index["iota"]["L_derivs"], build=True
-        )
+        self._profiles = get_profiles(*self._data_keys, eq=eq, grid=self.grid)
+        self._transforms = get_transforms(*self._data_keys, eq=eq, grid=self.grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -303,17 +274,17 @@ class IotaAt(_Objective):
         iota : ndarray
             rotational transform on specified flux surfaces.
         """
+        params = {
+            "R_lmn": R_lmn,
+            "Z_lmn": Z_lmn,
+            "L_lmn": L_lmn,
+            "i_l": i_l,
+            "c_l": c_l,
+            "Psi": Psi,
+        }
         data = compute_rotational_transform(
-            R_lmn,
-            Z_lmn,
-            L_lmn,
-            i_l,
-            c_l,
-            Psi,
-            self._R_transform,
-            self._Z_transform,
-            self._L_transform,
-            self._iota,
-            self._current,
+            params,
+            self._transforms,
+            self._profiles,
         )
         return self._shift_scale(data["iota"][0])

@@ -2,8 +2,9 @@ from desc.backend import jnp
 from desc.compute import (
     compute_geometry,
     compute_quasisymmetry_error,
-    data_index,
     compute_flux_coords,
+    get_profiles,
+    get_transforms,
 )
 from desc.compute.utils import compress
 from desc.objectives.objective_funs import _Objective
@@ -90,30 +91,15 @@ class QuasisymmetryTwoTermNormalized(_Objective):
             )
 
         self._dim_f = self.grid.num_nodes
+        self._data_keys = ["f_C", "|B|", "sqrt(g)"]
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        if eq.iota is not None:
-            self._iota = eq.iota.copy()
-            self._iota.grid = self.grid
-            self._current = None
-        else:
-            self._current = eq.current.copy()
-            self._current.grid = self.grid
-            self._iota = None
-
-        self._R_transform = Transform(
-            self.grid, eq.R_basis, derivs=data_index["f_C"]["R_derivs"], build=True
-        )
-        self._Z_transform = Transform(
-            self.grid, eq.Z_basis, derivs=data_index["f_C"]["R_derivs"], build=True
-        )
-        self._L_transform = Transform(
-            self.grid, eq.L_basis, derivs=data_index["f_C"]["L_derivs"], build=True
-        )
+        self._profiles = get_profiles(*self._data_keys, eq=eq, grid=self.grid)
+        self._transforms = get_transforms(*self._data_keys, eq=eq, grid=self.grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -145,23 +131,22 @@ class QuasisymmetryTwoTermNormalized(_Objective):
             Quasi-symmetry flux function error at each node.
 
         """
+        params = {
+            "R_lmn": R_lmn,
+            "Z_lmn": Z_lmn,
+            "L_lmn": L_lmn,
+            "i_l": i_l,
+            "c_l": c_l,
+            "Psi": Psi,
+        }
         data = compute_quasisymmetry_error(
-            R_lmn,
-            Z_lmn,
-            L_lmn,
-            i_l,
-            c_l,
-            Psi,
-            self._R_transform,
-            self._Z_transform,
-            self._L_transform,
-            self._iota,
-            self._current,
-            self._helicity,
+            params,
+            self._transforms,
+            self._profiles,
+            helicity=self._helicity,
         )
 
         denominator = jnp.sum(self.grid.weights * jnp.abs(data["sqrt(g)"]))
-
         f = (
             data["f_C"]
             / (data["|B|"] ** 3)
