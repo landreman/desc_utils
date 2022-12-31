@@ -1,8 +1,6 @@
 from desc.backend import jnp
+from desc.compute import compute as compute_fun
 from desc.compute import (
-    compute_geometry,
-    compute_jacobian,
-    compute_contravariant_metric_coefficients,
     get_profiles,
     get_transforms,
 )
@@ -103,16 +101,16 @@ class GradRho(_Objective):
         timer.start("Precomputing transforms")
 
         self._surf_profiles = get_profiles(
-            *self._surf_data_keys, eq=eq, grid=self.surf_grid
+            self._surf_data_keys, eq=eq, grid=self.surf_grid
         )
         self._surf_transforms = get_transforms(
-            *self._surf_data_keys, eq=eq, grid=self.surf_grid
+            self._surf_data_keys, eq=eq, grid=self.surf_grid
         )
         self._vol_profiles = get_profiles(
-            *self._vol_data_keys, eq=eq, grid=self.vol_grid
+            self._vol_data_keys, eq=eq, grid=self.vol_grid
         )
         self._vol_transforms = get_transforms(
-            *self._vol_data_keys, eq=eq, grid=self.vol_grid
+            self._vol_data_keys, eq=eq, grid=self.vol_grid
         )
 
         timer.stop("Precomputing transforms")
@@ -140,18 +138,17 @@ class GradRho(_Objective):
             "R_lmn": R_lmn,
             "Z_lmn": Z_lmn,
         }
-        surf_data = compute_jacobian(
-            params,
-            self._surf_transforms,
-            self._surf_profiles,
+        surf_data = compute_fun(
+            self._surf_data_keys,
+            params=params,
+            transforms=self._surf_transforms,
+            profiles=self._surf_profiles,
         )
-        surf_data = compute_contravariant_metric_coefficients(
-            params, self._surf_transforms, self._surf_profiles, data=surf_data
-        )
-        vol_data = compute_geometry(
-            params,
-            self._vol_transforms,
-            self._vol_profiles,
+        vol_data = compute_fun(
+            self._vol_data_keys,
+            params=params,
+            transforms=self._vol_transforms,
+            profiles=self._vol_profiles,
         )
 
         Vprime = jnp.sum(self.surf_grid.weights * surf_data["sqrt(g)"])

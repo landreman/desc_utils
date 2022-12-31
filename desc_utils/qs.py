@@ -1,8 +1,6 @@
 from desc.backend import jnp
+from desc.compute import compute as compute_fun
 from desc.compute import (
-    compute_geometry,
-    compute_quasisymmetry_error,
-    compute_flux_coords,
     get_profiles,
     get_transforms,
 )
@@ -98,8 +96,8 @@ class QuasisymmetryTwoTermNormalized(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(*self._data_keys, eq=eq, grid=self.grid)
-        self._transforms = get_transforms(*self._data_keys, eq=eq, grid=self.grid)
+        self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
+        self._transforms = get_transforms(self._data_keys, eq=eq, grid=self.grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -139,10 +137,11 @@ class QuasisymmetryTwoTermNormalized(_Objective):
             "c_l": c_l,
             "Psi": Psi,
         }
-        data = compute_quasisymmetry_error(
-            params,
-            self._transforms,
-            self._profiles,
+        data = compute_fun(
+            self._data_keys,
+            params=params,
+            transforms=self._transforms,
+            profiles=self._profiles,
             helicity=self._helicity,
         )
 

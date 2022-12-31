@@ -1,7 +1,6 @@
 from desc.backend import jnp
+from desc.compute import compute as compute_fun
 from desc.compute import (
-    compute_flux_coords,
-    compute_geometry,
     get_profiles,
     get_transforms,
 )
@@ -97,8 +96,8 @@ class MagneticWellThreshold(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(*self._data_keys, eq=eq, grid=self.grid)
-        self._transforms = get_transforms(*self._data_keys, eq=eq, grid=self.grid)
+        self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
+        self._transforms = get_transforms(self._data_keys, eq=eq, grid=self.grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -125,16 +124,11 @@ class MagneticWellThreshold(_Objective):
             "R_lmn": R_lmn,
             "Z_lmn": Z_lmn,
         }
-        data = compute_geometry(
-            params,
-            self._transforms,
-            self._profiles,
-        )
-        data = compute_flux_coords(
-            params,
-            self._transforms,
-            self._profiles,
-            data=data,
+        data = compute_fun(
+            self._data_keys,
+            params=params,
+            transforms=self._transforms,
+            profiles=self._profiles,
         )
         rho_weights = compress(self.grid, self.grid.spacing[:, 0])
 
