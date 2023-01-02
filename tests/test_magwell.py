@@ -110,12 +110,51 @@ def test_magwell_value():
                 (scalar_objective - expected) / (0.5 * (scalar_objective + threshold))
             )
             print(f"  expected: {expected}  rel diff: {rel_diff}")
-            np.testing.assert_allclose(
-                scalar_objective, expected, rtol=0.013
-            )
+            np.testing.assert_allclose(scalar_objective, expected, rtol=0.013)
 
         return scalar_objective
 
     thresholds = [0, 0.06, -0.06, 0.12, -0.12]
     for threshold in thresholds:
         test(threshold)
+
+
+def test_independent_of_size_and_B():
+    """
+    The magnetic well objective should be unchanged under scaling the size or field strength of a configuration
+    """
+    filenames = [
+        ".//tests//inputs//circular_model_tokamak_output.h5",
+        ".//tests//inputs//circular_model_tokamak_2xB_output.h5",
+        ".//tests//inputs//circular_model_tokamak_2xSize_output.h5",
+    ]
+
+    def test(eq):
+        grid = QuadratureGrid(
+            L=eq.L,
+            M=eq.M,
+            N=eq.M,  # Note M instead of N here
+            NFP=eq.NFP,
+        )
+        obj = ObjectiveFunction(
+            MagneticWellThreshold(
+                grid=grid,
+                threshold=-0.3,
+            ),
+            eq,
+        )
+        scalar_objective = obj.compute_scalar(obj.x(eq))
+        print(f"obj: {scalar_objective:11.9g}  file: {filename}")
+        assert np.abs(scalar_objective) > 0.01
+        return scalar_objective
+
+    results = []
+    for filename in filenames:
+        eq = desc.io.load(filename)[-1]
+        results.append(test(eq))
+
+    results = np.array(results)
+    print(results)
+
+    # Results should all be the same:
+    np.testing.assert_allclose(results, np.mean(results), rtol=1e-4)

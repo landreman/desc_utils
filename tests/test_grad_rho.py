@@ -114,3 +114,51 @@ def test_grad_rho_value():
     thresholds = [-1.1, 0, 0.5, 1.3, 5.1]
     for threshold in thresholds:
         test(threshold)
+
+
+def test_independent_of_size_and_B():
+    """
+    The |grad rho| objective should be unchanged under scaling the size or field strength of a configuration
+    """
+    filenames = [
+        ".//tests//inputs//circular_model_tokamak_output.h5",
+        ".//tests//inputs//circular_model_tokamak_2xB_output.h5",
+        ".//tests//inputs//circular_model_tokamak_2xSize_output.h5",
+    ]
+
+    def test(eq):
+        vol_grid = QuadratureGrid(
+            L=eq.L * 2,
+            M=eq.M * 2,
+            N=eq.N * 2,
+            NFP=eq.NFP,
+        )
+        surf_grid = LinearGrid(
+            rho=1,
+            M=eq.M * 2,
+            N=eq.N * 2,
+            NFP=eq.NFP,
+        )
+        obj = ObjectiveFunction(
+            GradRho(
+                vol_grid=vol_grid,
+                surf_grid=surf_grid,
+                threshold=0.7,
+            ),
+            eq,
+        )
+        scalar_objective = obj.compute_scalar(obj.x(eq))
+        print(f"obj: {scalar_objective:11.9g}  file: {filename}")
+        assert np.abs(scalar_objective) > 0.01
+        return scalar_objective
+
+    results = []
+    for filename in filenames:
+        eq = desc.io.load(filename)[-1]
+        results.append(test(eq))
+
+    results = np.array(results)
+    print(results)
+
+    # Results should all be the same:
+    np.testing.assert_allclose(results, np.mean(results), rtol=1e-4)

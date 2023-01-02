@@ -123,3 +123,44 @@ def test_QA_QH():
 
     # For the QH objective, the QH config should have lower residual than the QA config:
     assert results[3] < results[0] * 2e-4
+
+
+def test_independent_of_size_and_B():
+    """
+    The QS objective should be unchanged under scaling the size or field strength of a configuration
+    """
+    filenames = [
+        ".//tests//inputs//circular_model_tokamak_output.h5",
+        ".//tests//inputs//circular_model_tokamak_2xB_output.h5",
+        ".//tests//inputs//circular_model_tokamak_2xSize_output.h5",
+    ]
+
+    def test(eq):
+        grid = QuadratureGrid(
+            L=eq.L,
+            M=eq.M,
+            N=eq.M,  # Note M instead of N here
+            NFP=eq.NFP,
+        )
+        obj = ObjectiveFunction(
+            QuasisymmetryTwoTermNormalized(
+                grid=grid,
+                helicity=(1, 1),
+            ),
+            eq,
+        )
+        scalar_objective = obj.compute_scalar(obj.x(eq))
+        print(f"obj: {scalar_objective:11.9g}  file: {filename}")
+        assert np.abs(scalar_objective) > 0.01
+        return scalar_objective
+
+    results = []
+    for filename in filenames:
+        eq = desc.io.load(filename)[-1]
+        results.append(test(eq))
+
+    results = np.array(results)
+    print(results)
+
+    # Results should all be the same:
+    np.testing.assert_allclose(results, np.mean(results), rtol=1e-6)
