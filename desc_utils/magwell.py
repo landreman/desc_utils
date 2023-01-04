@@ -1,6 +1,7 @@
 from desc.backend import jnp
 from desc.compute import compute as compute_fun
 from desc.compute import (
+    get_params,
     get_profiles,
     get_transforms,
 )
@@ -90,6 +91,7 @@ class MagneticWellThreshold(_Objective):
 
         self._dim_f = self.grid.num_rho
         self._data_keys = ["V_rr(r)", "V_r(r)", "rho", "V"]
+        self._args = get_params(self._data_keys)
 
         timer = Timer()
         if verbose > 0:
@@ -105,7 +107,7 @@ class MagneticWellThreshold(_Objective):
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
-    def compute(self, R_lmn, Z_lmn, **kwargs):
+    def compute(self, *args, **kwargs):
         """Compute objective
 
         Parameters
@@ -120,10 +122,7 @@ class MagneticWellThreshold(_Objective):
         V : float
 
         """
-        params = {
-            "R_lmn": R_lmn,
-            "Z_lmn": Z_lmn,
-        }
+        params = self._parse_args(*args, **kwargs)
         data = compute_fun(
             self._data_keys,
             params=params,

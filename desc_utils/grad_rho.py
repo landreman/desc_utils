@@ -1,6 +1,7 @@
 from desc.backend import jnp
 from desc.compute import compute as compute_fun
 from desc.compute import (
+    get_params,
     get_profiles,
     get_transforms,
 )
@@ -94,6 +95,7 @@ class GradRho(_Objective):
         self._dim_f = self.surf_grid.num_nodes
         self._surf_data_keys = ["sqrt(g)", "|grad(rho)|"]
         self._vol_data_keys = ["a"]
+        self._args = get_params(self._surf_data_keys)
 
         timer = Timer()
         if verbose > 0:
@@ -119,7 +121,7 @@ class GradRho(_Objective):
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
-    def compute(self, R_lmn, Z_lmn, **kwargs):
+    def compute(self, *args, **kwargs):
         """Compute objective
 
         Parameters
@@ -134,10 +136,7 @@ class GradRho(_Objective):
         V : float
 
         """
-        params = {
-            "R_lmn": R_lmn,
-            "Z_lmn": Z_lmn,
-        }
+        params = self._parse_args(*args, **kwargs)
         surf_data = compute_fun(
             self._surf_data_keys,
             params=params,
