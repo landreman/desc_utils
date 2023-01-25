@@ -84,7 +84,7 @@ def test_mean_iota_value():
 
         expected = 0.5 * (0.42 - target) ** 2
         rel_diff = abs(
-            (scalar_objective - expected) / (0.5 * (scalar_objective + target))
+            (scalar_objective - expected) / (0.5 * (scalar_objective + expected))
         )
         print(
             f"target: {target}  obj: {scalar_objective:11.9g}  "
@@ -171,7 +171,7 @@ def test_iota_at_value():
 
         expected = 0.5 * (0.42 - target) ** 2
         rel_diff = abs(
-            (scalar_objective - expected) / (0.5 * (scalar_objective + target))
+            (scalar_objective - expected) / (0.5 * (scalar_objective + expected))
         )
         print(
             f"target: {target}  obj: {scalar_objective:11.9g}  "
