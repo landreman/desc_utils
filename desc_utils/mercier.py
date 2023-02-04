@@ -157,8 +157,6 @@ class MercierThreshold(_Objective):
             self.grid, data[self.Mercier_term] / normalization
         )
 
-        residuals = jnp.maximum(0.0, self.threshold - DMercier_normalized) * jnp.sqrt(
+        return jnp.maximum(0.0, self.threshold - DMercier_normalized) * jnp.sqrt(
             rho_weights
         )
-
-        return self._shift_scale(residuals)

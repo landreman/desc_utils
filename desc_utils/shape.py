@@ -147,11 +147,9 @@ class AxisymmetryBarrier(_Objective):
         params = self._parse_args(*args, **kwargs)
         R001 = params["R_lmn"][self.R_index]
         Z001 = params["Z_lmn"][self.Z_index]
-        residuals = jnp.array(
+        return jnp.array(
             [
                 jnp.minimum(0.0, jnp.abs(R001) - self.R_threshold),
                 jnp.minimum(0.0, jnp.abs(Z001) - self.Z_threshold),
             ],
         )
-
-        return self._shift_scale(residuals)

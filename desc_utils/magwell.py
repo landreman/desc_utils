@@ -135,8 +135,6 @@ class MagneticWellThreshold(_Objective):
             self.grid,
             (data["V_rr(r)"] - data["V_r(r)"] / data["rho"]) / (4 * data["rho"] ** 2),
         )
-        residuals = jnp.maximum(
-            0.0, d2_volume_d_s2 / data["V"] - self.threshold
-        ) * jnp.sqrt(rho_weights)
-
-        return self._shift_scale(residuals)
+        return jnp.maximum(0.0, d2_volume_d_s2 / data["V"] - self.threshold) * jnp.sqrt(
+            rho_weights
+        )

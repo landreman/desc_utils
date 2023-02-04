@@ -151,8 +151,6 @@ class GradRho(_Objective):
         )
 
         Vprime = jnp.sum(self.surf_grid.weights * surf_data["sqrt(g)"])
-        residuals = jnp.sqrt(
+        return jnp.sqrt(
             self.surf_grid.weights * surf_data["sqrt(g)"] / Vprime
         ) * jnp.maximum(0.0, vol_data["a"] * surf_data["|grad(rho)|"] - self.threshold)
-
-        return self._shift_scale(residuals)

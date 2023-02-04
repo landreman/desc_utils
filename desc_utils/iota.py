@@ -138,12 +138,11 @@ class MeanIota(_Objective):
             transforms=self._transforms,
             profiles=self._profiles,
         )
-        mean_iota = jnp.sum(
+        return jnp.sum(
             compress(
                 self.grid, data["iota"] * self.grid.spacing[:, 0], surface_label="rho"
             )
         )
-        return self._shift_scale(mean_iota)
 
 
 class IotaAt(_Objective):
@@ -278,4 +277,4 @@ class IotaAt(_Objective):
             transforms=self._transforms,
             profiles=self._profiles,
         )
-        return self._shift_scale(data["iota"][0])
+        return data["iota"][0]

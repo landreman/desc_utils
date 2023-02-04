@@ -141,13 +141,11 @@ class QuasisymmetryTwoTermNormalized(_Objective):
         )
 
         denominator = jnp.sum(self.grid.weights * jnp.abs(data["sqrt(g)"]))
-        f = (
+        return (
             data["f_C"]
             / (data["|B|"] ** 3)
             * jnp.sqrt(self.grid.weights * jnp.abs(data["sqrt(g)"]) / denominator)
         )
-
-        return self._shift_scale(f)
 
     @property
     def helicity(self):
