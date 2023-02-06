@@ -1,3 +1,4 @@
+from .bootstrap import BootstrapRedlConsistencyNormalized
 from .grad_rho import GradRho
 from .iota import MeanIota, IotaAt
 from .magwell import MagneticWellThreshold
