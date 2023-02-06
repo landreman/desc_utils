@@ -114,15 +114,15 @@ def test_QA_QH():
     assert results[1] < results[0] * 1e-6
     assert results[1] < results[2] * 1e-6
 
-    # For the QH config, helicity = -1 should give the lowest residual:
-    assert results[3] < results[4] * 2e-5
-    assert results[3] < results[5] * 2e-5
+    # For the QH config, helicity = 1 should give the lowest residual:
+    assert results[5] < results[3] * 2e-5
+    assert results[5] < results[4] * 2e-5
 
     # For the QA objective, the QA config should have lower residual than the QH config:
     assert results[1] < results[4] * 1e-7
 
     # For the QH objective, the QH config should have lower residual than the QA config:
-    assert results[3] < results[0] * 2e-4
+    assert results[5] < results[2] * 2e-4
 
 
 def test_independent_of_size_and_B():
