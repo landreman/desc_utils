@@ -46,7 +46,7 @@ class GradRho0(_Objective):
     _scalar = False
     _linear = False
     _units = "(dimensionless)"
-    print_value_fmt = "|grad rho| penalty: {:10.3e} "
+    _print_value_fmt = "|grad rho| penalty: {:10.3e} "
 
     def __init__(
         self,
@@ -194,7 +194,7 @@ class GradRho(_Objective):
     _scalar = False
     _linear = False
     _units = "(dimensionless)"
-    print_value_fmt = "|grad rho| penalty: {:10.3e} "
+    _print_value_fmt = "|grad rho| penalty: {:10.3e} "
 
     def __init__(
         self,
