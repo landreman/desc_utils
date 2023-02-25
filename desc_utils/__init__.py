@@ -3,5 +3,5 @@ from .grad_rho import GradRho, GradRho0
 from .iota import MeanIota, IotaAt
 from .magwell import MagneticWellThreshold
 from .mercier import Mercier_normalization, MercierThreshold
-from .qs import QuasisymmetryTwoTermNormalized
+from .qs import QuasisymmetryTwoTermNormalized, B01
 from .shape import AxisymmetryBarrier
