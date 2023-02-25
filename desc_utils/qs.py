@@ -1,5 +1,5 @@
 import numpy as np
-from desc.backend import jnp
+from desc.backend import jnp, put
 from desc.compute import compute as compute_fun
 from desc.compute import (
     get_params,
@@ -283,7 +283,7 @@ class B01(_Objective):
         if verbose > 1:
             timer.disp("Precomputing transforms")
 
-        self._dim_f = 2
+        self._dim_f = data["B modes"].shape[0]
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
@@ -302,9 +302,7 @@ class B01(_Objective):
             transforms=self._transforms,
             profiles=self._profiles,
         )
-        return jnp.array(
-            [
-                data["|B|_mn"][self.idx_00] - self.b00,
-                data["|B|_mn"][self.idx_01] - self.b01,
-            ]
-        )
+        residuals = data["|B|_mn"]
+        residuals = put(residuals, self.idx_00, residuals[self.idx_00] - self.b00)
+        residuals = put(residuals, self.idx_01, residuals[self.idx_01] - self.b01)
+        return residuals

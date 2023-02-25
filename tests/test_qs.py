@@ -190,8 +190,8 @@ def test_b01_value():
 
     np.testing.assert_allclose(expected_b00, np.mean(data["|B|"]), rtol=0.4)
 
-    desired_b00 = 1.3
-    desired_b01 = 0.3
+    desired_b00 = 0.3
+    desired_b01 = 0.1
 
     obj_term = B01(grid=grid, b00=desired_b00, b01=desired_b01, M_booz=3, N_booz=3)
     obj = ObjectiveFunction(obj_term, eq)
@@ -199,7 +199,9 @@ def test_b01_value():
     scalar_objective = obj.compute_scalar(obj.x(eq))
     assert obj_term.idx_00 == idx_00
     assert obj_term.idx_01 == idx_01
-    expected_objective = 0.5 * (
-        (expected_b00 - desired_b00) ** 2 + (expected_b01 - desired_b01) ** 2
-    )
-    np.testing.assert_allclose(scalar_objective, expected_objective)
+
+    arr = np.array(data["|B|_mn"])
+    arr[idx_00] = arr[idx_00] - desired_b00
+    arr[idx_01] = arr[idx_01] - desired_b01
+    expected_objective = 0.5 * np.sum(arr**2)
+    np.testing.assert_allclose(scalar_objective, expected_objective, atol=0, rtol=1e-15)
