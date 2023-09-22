@@ -5,7 +5,6 @@ import pytest
 
 import desc.io
 from desc.grid import LinearGrid, QuadratureGrid
-from desc.optimize import Optimizer
 from desc.objectives import *
 
 from desc_utils import MagneticWellThreshold
@@ -33,9 +32,10 @@ def test_magwell_resolution():
             MagneticWellThreshold(
                 grid=grid,
                 threshold=-0.1,
+                eq=eq,
             ),
-            eq,
         )
+        obj.build()
         scalar_objective = obj.compute_scalar(obj.x(eq))
         print(
             f"obj: {scalar_objective:11.9g}  grid: {grid_type}  L: {L}  M: {M}  N: {N}"
@@ -96,9 +96,10 @@ def test_magwell_value():
             MagneticWellThreshold(
                 grid=grid,
                 threshold=threshold,
+                eq=eq,
             ),
-            eq,
         )
+        obj.build()
         scalar_objective = obj.compute_scalar(obj.x(eq))
         print(f"obj: {scalar_objective:11.9g}  threshold: {threshold}")
 
@@ -140,9 +141,10 @@ def test_independent_of_size_and_B():
             MagneticWellThreshold(
                 grid=grid,
                 threshold=-0.3,
+                eq=eq,
             ),
-            eq,
         )
+        obj.build()
         scalar_objective = obj.compute_scalar(obj.x(eq))
         print(f"obj: {scalar_objective:11.9g}  file: {filename}")
         assert np.abs(scalar_objective) > 0.01

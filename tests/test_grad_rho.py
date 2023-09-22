@@ -39,9 +39,10 @@ def test_grad_rho0_resolution():
                 vol_grid=vol_grid,
                 surf_grid=surf_grid,
                 threshold=1.1,
+                eq=eq,
             ),
-            eq,
         )
+        obj.build()
         scalar_objective = obj.compute_scalar(obj.x(eq))
         print(f"obj: {scalar_objective:11.9g}  L: {L}  M: {M}  N: {N}")
         return scalar_objective
@@ -93,9 +94,10 @@ def test_grad_rho0_value():
                 vol_grid=vol_grid,
                 surf_grid=surf_grid,
                 threshold=threshold,
+                eq=eq,
             ),
-            eq,
         )
+        obj.build()
         scalar_objective = obj.compute_scalar(obj.x(eq))
         print(f"obj: {scalar_objective:11.9g}  threshold: {threshold}")
 
@@ -144,9 +146,10 @@ def test_grad_rho0_independent_of_size_and_B():
                 vol_grid=vol_grid,
                 surf_grid=surf_grid,
                 threshold=0.7,
+                eq=eq,
             ),
-            eq,
         )
+        obj.build()
         scalar_objective = obj.compute_scalar(obj.x(eq))
         print(f"obj: {scalar_objective:11.9g}  file: {filename}")
         assert np.abs(scalar_objective) > 0.01
@@ -187,9 +190,10 @@ def test_grad_rho_resolution():
                 grid=grid,
                 threshold=1.1,
                 a_minor=a_minor,
+                eq=eq,
             ),
-            eq,
         )
+        obj.build()
         scalar_objective = obj.compute_scalar(obj.x(eq))
         print(f"obj: {scalar_objective:11.9g}  L: {L}  M: {M}  N: {N}")
         return scalar_objective
@@ -236,9 +240,10 @@ def test_grad_rho_value():
                 grid=grid,
                 threshold=threshold,
                 a_minor=a_minor,
+                eq=eq,
             ),
-            eq,
         )
+        obj.build()
         scalar_objective = obj.compute_scalar(obj.x(eq))
         print(f"obj: {scalar_objective:11.9g}  threshold: {threshold}")
 
@@ -282,9 +287,10 @@ def test_grad_rho_independent_of_size_and_B():
                 grid=grid,
                 threshold=0.7,
                 a_minor=a_minor,
+                eq=eq,
             ),
-            eq,
         )
+        obj.build()
         scalar_objective = obj.compute_scalar(obj.x(eq))
         print(f"obj: {scalar_objective:11.9g}  file: {filename}")
         assert np.abs(scalar_objective) > 0.01

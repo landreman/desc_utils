@@ -5,7 +5,6 @@ import pytest
 
 import desc.io
 from desc.grid import LinearGrid, QuadratureGrid
-from desc.optimize import Optimizer
 from desc.objectives import *
 
 from desc_utils import AxisymmetryBarrier
@@ -29,9 +28,10 @@ def test_axisymmetry_barrier_value():
             AxisymmetryBarrier(
                 R_threshold=R_threshold,
                 Z_threshold=Z_threshold,
+                eq=eq,
             ),
-            eq,
         )
+        obj.build()
         scalar_objective = obj.compute_scalar(obj.x(eq))
         residual1 = 0
         residual2 = 0

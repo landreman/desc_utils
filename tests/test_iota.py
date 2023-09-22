@@ -5,7 +5,6 @@ import pytest
 
 import desc.io
 from desc.grid import LinearGrid, QuadratureGrid
-from desc.optimize import Optimizer
 from desc.objectives import *
 
 from desc_utils import MeanIota, IotaAt
@@ -32,9 +31,10 @@ def test_mean_iota_resolution():
             MeanIota(
                 grid=grid,
                 target=0.6,
+                eq=eq,
             ),
-            eq,
         )
+        obj.build()
         scalar_objective = obj.compute_scalar(obj.x(eq))
         print(f"obj: {scalar_objective:11.9g}  L: {L}  M: {M}  N: {N}")
         return scalar_objective
@@ -77,9 +77,10 @@ def test_mean_iota_value():
             MeanIota(
                 grid=grid,
                 target=target,
+                eq=eq,
             ),
-            eq,
         )
+        obj.build()
         scalar_objective = obj.compute_scalar(obj.x(eq))
 
         expected = 0.5 * (0.42 - target) ** 2
@@ -120,9 +121,10 @@ def test_iota_at_resolution():
             IotaAt(
                 grid=grid,
                 target=0.6,
+                eq=eq,
             ),
-            eq,
         )
+        obj.build()
         scalar_objective = obj.compute_scalar(obj.x(eq))
         print(f"obj: {scalar_objective:11.9g}  M: {M}  N: {N}")
         return scalar_objective
@@ -164,9 +166,10 @@ def test_iota_at_value():
             IotaAt(
                 grid=grid,
                 target=target,
+                eq=eq,
             ),
-            eq,
         )
+        obj.build()
         scalar_objective = obj.compute_scalar(obj.x(eq))
 
         expected = 0.5 * (0.42 - target) ** 2

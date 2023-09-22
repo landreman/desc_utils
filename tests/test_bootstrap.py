@@ -7,7 +7,6 @@ from scipy.constants import elementary_charge
 from scipy.integrate import quad
 
 import desc.io
-from desc.compute.utils import compress, expand
 from desc.equilibrium import Equilibrium
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid, QuadratureGrid
@@ -70,14 +69,15 @@ class TestBootstrapObjectives:
             NFP=eq.NFP,
         )
         obj = ObjectiveFunction(
-            BootstrapRedlConsistency(grid=grid, helicity=helicity), eq
+            BootstrapRedlConsistency(grid=grid, helicity=helicity, eq=eq),
         )
+        obj.build()
         np.set_printoptions(linewidth=400)
         scalar_objective1 = obj.compute_scalar(obj.x(eq))
         print(scalar_objective1)
         data = eq.compute(["<J*B>", "<J*B> Redl"], grid=grid)
-        print("<J*B>:     ", compress(grid, data["<J*B>"]))
-        print("<J*B> Redl:", compress(grid, data["<J*B> Redl"]))
+        print("<J*B>:     ", grid.compress(data["<J*B>"]))
+        print("<J*B> Redl:", grid.compress(data["<J*B> Redl"]))
 
         # Scale |B|, changing <J*B> and <J*B>_Redl by the following factor:
         factor = 2.0
@@ -92,13 +92,14 @@ class TestBootstrapObjectives:
             factor ** (2.0 / 5) * Ti0 * np.array([1.02, -3, 3, -1]), modes=[0, 2, 4, 6]
         )
         obj = ObjectiveFunction(
-            BootstrapRedlConsistency(grid=grid, helicity=helicity), eq
+            BootstrapRedlConsistency(grid=grid, helicity=helicity, eq=eq),
         )
+        obj.build()
         scalar_objective2 = obj.compute_scalar(obj.x(eq))
         print(scalar_objective2)
         data = eq.compute(["<J*B>", "<J*B> Redl"], grid=grid)
-        print("<J*B>:     ", compress(grid, data["<J*B>"]))
-        print("<J*B> Redl:", compress(grid, data["<J*B> Redl"]))
+        print("<J*B>:     ", grid.compress(data["<J*B>"]))
+        print("<J*B> Redl:", grid.compress(data["<J*B> Redl"]))
 
         # Scale size, changing <J*B> and <J*B>_Redl by the following factor:
         factor = 3.0
@@ -117,13 +118,14 @@ class TestBootstrapObjectives:
             factor ** (-2.0 / 5) * Ti0 * np.array([1.02, -3, 3, -1]), modes=[0, 2, 4, 6]
         )
         obj = ObjectiveFunction(
-            BootstrapRedlConsistency(grid=grid, helicity=helicity), eq
+            BootstrapRedlConsistency(grid=grid, helicity=helicity, eq=eq),
         )
+        obj.build()
         scalar_objective3 = obj.compute_scalar(obj.x(eq))
         print(scalar_objective3)
         data = eq.compute(["<J*B>", "<J*B> Redl"], grid=grid)
-        print("<J*B>:     ", compress(grid, data["<J*B>"]))
-        print("<J*B> Redl:", compress(grid, data["<J*B> Redl"]))
+        print("<J*B>:     ", grid.compress(data["<J*B>"]))
+        print("<J*B> Redl:", grid.compress(data["<J*B> Redl"]))
 
         results = np.array([scalar_objective1, scalar_objective2, scalar_objective3])
         # Results are not perfectly identical because ln(Lambda) is not quite invariant.
@@ -160,9 +162,10 @@ class TestBootstrapObjectives:
                 BootstrapRedlConsistencyNormalized(
                     grid=grid,
                     helicity=helicity,
+                    eq=eq,
                 ),
-                eq,
             )
+            obj.build()
             scalar_objective = obj.compute_scalar(obj.x(eq))
             print("Should be approximately 0.5:", scalar_objective)
             return scalar_objective
@@ -219,9 +222,10 @@ class TestBootstrapObjectives:
                 BootstrapRedlConsistencyNormalized(
                     grid=grid,
                     helicity=helicity,
+                    eq=eq,
                 ),
-                eq,
             )
+            obj.build()
             scalar_objective = obj.compute_scalar(obj.x(eq))
             print(f"grid_type:{grid_type} L:{L} M:{M} N:{N} obj:{scalar_objective}")
             return scalar_objective
@@ -299,9 +303,9 @@ class TestBootstrapObjectives:
         eq.solve(
             verbose=3,
             ftol=1e-8,
-            constraints=get_fixed_boundary_constraints(kinetic=True),
+            constraints=get_fixed_boundary_constraints(kinetic=True, eq=eq),
             optimizer=Optimizer("lsq-exact"),
-            objective=ObjectiveFunction(objectives=ForceBalance()),
+            objective=ObjectiveFunction(objectives=ForceBalance(eq=eq)),
         )
 
         initial_output_file = "test_bootstrap_consistency_iota_initial.h5"
@@ -311,14 +315,14 @@ class TestBootstrapObjectives:
         # Done establishing the initial condition. Now set up the optimization.
 
         constraints = (
-            ForceBalance(),
-            FixBoundaryR(),
-            FixBoundaryZ(),
-            FixElectronDensity(),
-            FixElectronTemperature(),
-            FixIonTemperature(),
-            FixAtomicNumber(),
-            FixPsi(),
+            ForceBalance(eq=eq),
+            FixBoundaryR(eq=eq),
+            FixBoundaryZ(eq=eq),
+            FixElectronDensity(eq=eq),
+            FixElectronTemperature(eq=eq),
+            FixIonTemperature(eq=eq),
+            FixAtomicNumber(eq=eq),
+            FixPsi(eq=eq),
         )
 
         # grid for bootstrap consistency objective:
@@ -332,13 +336,14 @@ class TestBootstrapObjectives:
             BootstrapRedlConsistencyNormalized(
                 grid=grid,
                 helicity=helicity,
+                eq=eq,
             )
         )
         eq, _ = eq.optimize(
             verbose=3,
             objective=objective,
             constraints=constraints,
-            optimizer=Optimizer("scipy-trf"),
+            optimizer=Optimizer("proximal-scipy-trf"),
             ftol=1e-6,
         )
 
@@ -353,8 +358,8 @@ class TestBootstrapObjectives:
             grid=grid,
             helicity=helicity,
         )
-        J_dot_B_MHD = compress(grid, data["<J*B>"])
-        J_dot_B_Redl = compress(grid, data["<J*B> Redl"])
+        J_dot_B_MHD = grid.compress(data["<J*B>"])
+        J_dot_B_Redl = grid.compress(data["<J*B> Redl"])
 
         assert np.max(J_dot_B_MHD) < 4e5
         assert np.max(J_dot_B_MHD) > 0
@@ -415,9 +420,9 @@ class TestBootstrapObjectives:
         eq.solve(
             verbose=3,
             ftol=1e-8,
-            constraints=get_fixed_boundary_constraints(kinetic=True, iota=False),
+            constraints=get_fixed_boundary_constraints(kinetic=True, iota=False, eq=eq),
             optimizer=Optimizer("lsq-exact"),
-            objective=ObjectiveFunction(objectives=ForceBalance()),
+            objective=ObjectiveFunction(objectives=ForceBalance(eq=eq)),
         )
 
         initial_output_file = "test_bootstrap_consistency_current_initial.h5"
@@ -427,15 +432,15 @@ class TestBootstrapObjectives:
         # Done establishing the initial condition. Now set up the optimization.
 
         constraints = (
-            ForceBalance(),
-            FixBoundaryR(),
-            FixBoundaryZ(),
-            FixElectronDensity(),
-            FixElectronTemperature(),
-            FixIonTemperature(),
-            FixAtomicNumber(),
-            FixCurrent(indices=[0]),
-            FixPsi(),
+            ForceBalance(eq=eq),
+            FixBoundaryR(eq=eq),
+            FixBoundaryZ(eq=eq),
+            FixElectronDensity(eq=eq),
+            FixElectronTemperature(eq=eq),
+            FixIonTemperature(eq=eq),
+            FixAtomicNumber(eq=eq),
+            FixCurrent(indices=[0], eq=eq),
+            FixPsi(eq=eq),
         )
 
         # grid for bootstrap consistency objective:
@@ -449,13 +454,14 @@ class TestBootstrapObjectives:
             BootstrapRedlConsistencyNormalized(
                 grid=grid,
                 helicity=helicity,
+                eq=eq,
             )
         )
         eq, _ = eq.optimize(
             verbose=3,
             objective=objective,
             constraints=constraints,
-            optimizer=Optimizer("scipy-trf"),
+            optimizer=Optimizer("proximal-scipy-trf"),
             ftol=1e-6,
             gtol=0,  # It is critical to set gtol=0 when optimizing current profile!
         )
@@ -471,8 +477,8 @@ class TestBootstrapObjectives:
             grid=grid,
             helicity=helicity,
         )
-        J_dot_B_MHD = compress(grid, data["<J*B>"])
-        J_dot_B_Redl = compress(grid, data["<J*B> Redl"])
+        J_dot_B_MHD = grid.compress(data["<J*B>"])
+        J_dot_B_Redl = grid.compress(data["<J*B> Redl"])
 
         assert np.max(J_dot_B_MHD) < 4e5
         assert np.max(J_dot_B_MHD) > 0

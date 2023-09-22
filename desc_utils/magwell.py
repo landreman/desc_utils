@@ -5,9 +5,8 @@ from desc.compute import (
     get_profiles,
     get_transforms,
 )
-from desc.compute.utils import compress
+from desc.grid import QuadratureGrid
 from desc.objectives.objective_funs import _Objective
-from desc.transform import Transform
 from desc.utils import Timer
 
 
@@ -44,14 +43,14 @@ class MagneticWellThreshold(_Objective):
     """
 
     _scalar = True
-    _linear = False
     _units = "(dimensionless)"
     _print_value_fmt = "Magnetic well objective: {:10.3e} "
 
     def __init__(
         self,
         eq=None,
-        target=0,
+        target=None,
+        bounds=None,
         weight=1,
         normalize=False,
         normalize_target=False,
@@ -59,19 +58,21 @@ class MagneticWellThreshold(_Objective):
         name="V''(s)",
         threshold=0.0,
     ):
-
-        self.grid = grid
+        if target is None and bounds is None:
+            target = 0
+        self._grid = grid
         self.threshold = threshold
         super().__init__(
             eq=eq,
             target=target,
+            bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
             name=name,
         )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -84,22 +85,33 @@ class MagneticWellThreshold(_Objective):
             Level of output.
 
         """
-        if self.grid is None:
-            self.grid = QuadratureGrid(
+        eq = eq or self._eq
+        if self._grid is None:
+            grid = QuadratureGrid(
                 L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP
             )
+        else:
+            grid = self._grid
 
-        self._dim_f = self.grid.num_rho
+        self._dim_f = grid.num_rho
         self._data_keys = ["V_rr(r)", "V_r(r)", "rho", "V"]
-        self._args = get_params(self._data_keys)
+        self._args = get_params(
+            self._data_keys,
+            obj="desc.equilibrium.equilibrium.Equilibrium",
+            has_axis=grid.axis.size,
+        )
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
-        self._transforms = get_transforms(self._data_keys, eq=eq, grid=self.grid)
+        profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
+        self._constants = {
+            "transforms": transforms,
+            "profiles": profiles,
+        }
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -122,17 +134,20 @@ class MagneticWellThreshold(_Objective):
         V : float
 
         """
-        params = self._parse_args(*args, **kwargs)
+        params, constants = self._parse_args(*args, **kwargs)
+        if constants is None:
+            constants = self._constants
         data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
             params=params,
-            transforms=self._transforms,
-            profiles=self._profiles,
+            transforms=constants["transforms"],
+            profiles=constants["profiles"],
         )
-        rho_weights = compress(self.grid, self.grid.spacing[:, 0])
+        grid = constants["transforms"]["grid"]
+        rho_weights = grid.compress(grid.spacing[:, 0])
 
-        d2_volume_d_s2 = compress(
-            self.grid,
+        d2_volume_d_s2 = grid.compress(
             (data["V_rr(r)"] - data["V_r(r)"] / data["rho"]) / (4 * data["rho"] ** 2),
         )
         return jnp.maximum(0.0, d2_volume_d_s2 / data["V"] - self.threshold) * jnp.sqrt(

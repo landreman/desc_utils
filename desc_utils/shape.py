@@ -5,9 +5,7 @@ from desc.compute import (
     get_profiles,
     get_transforms,
 )
-from desc.compute.utils import compress
 from desc.objectives.objective_funs import _Objective
-from desc.transform import Transform
 from desc.utils import Timer
 
 
@@ -42,14 +40,14 @@ class AxisymmetryBarrier(_Objective):
     """
 
     _scalar = True
-    _linear = False
     _units = "(dimensionless)"
     _print_value_fmt = "Axisymmetry barrier: {:10.3e} "
 
     def __init__(
         self,
         eq=None,
-        target=0,
+        target=None,
+        bounds=None,
         weight=1,
         normalize=False,
         normalize_target=False,
@@ -58,8 +56,9 @@ class AxisymmetryBarrier(_Objective):
         R_threshold=0.0,
         Z_threshold=0.0,
     ):
-
-        self.grid = grid
+        if target is None and bounds is None:
+            target = 0
+        self._grid = grid
         assert R_threshold >= 0
         assert Z_threshold >= 0
         self.R_threshold = R_threshold
@@ -67,13 +66,14 @@ class AxisymmetryBarrier(_Objective):
         super().__init__(
             eq=eq,
             target=target,
+            bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
             name=name,
         )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -86,6 +86,7 @@ class AxisymmetryBarrier(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         # if self.grid is None:
         #    self.grid = QuadratureGrid(
         #        L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP
@@ -93,7 +94,11 @@ class AxisymmetryBarrier(_Objective):
 
         self._dim_f = 2
         self._data_keys = ["R", "Z"]
-        self._args = get_params(self._data_keys)
+        self._args = get_params(
+            self._data_keys,
+            obj="desc.equilibrium.equilibrium.Equilibrium",
+            has_axis=False,  # MJL 20230921 Not sure about this line
+        )
 
         index = None
         modes = eq.R_basis.modes
@@ -120,8 +125,12 @@ class AxisymmetryBarrier(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        # self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
-        # self._transforms = get_transforms(self._data_keys, eq=eq, grid=self.grid)
+        # profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        # transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
+        #self._constants = {
+        #    "transforms": transforms,
+        #    "profiles": profiles,
+        #}
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -144,7 +153,7 @@ class AxisymmetryBarrier(_Objective):
         V : float
 
         """
-        params = self._parse_args(*args, **kwargs)
+        params, constants = self._parse_args(*args, **kwargs)
         R001 = params["R_lmn"][self.R_index]
         Z001 = params["Z_lmn"][self.Z_index]
         return jnp.array(

@@ -5,7 +5,6 @@ import pytest
 
 import desc.io
 from desc.grid import LinearGrid, QuadratureGrid
-from desc.optimize import Optimizer
 from desc.objectives import *
 
 from desc_utils import QuasisymmetryTwoTermNormalized
@@ -33,9 +32,10 @@ def test_quasisymmetry_resolution():
             QuasisymmetryTwoTermNormalized(
                 grid=grid,
                 helicity=(1, helicity_N),
+                eq=eq,
             ),
-            eq,
         )
+        obj.build()
         scalar_objective = obj.compute_scalar(obj.x(eq))
         print(
             f"obj: {scalar_objective:11.9g}  helicity: {helicity_N}  grid: {grid_type}  L: {L}  M: {M}  N: {N}"
@@ -92,9 +92,10 @@ def test_QA_QH():
             QuasisymmetryTwoTermNormalized(
                 grid=grid,
                 helicity=(1, helicity_n * eq.NFP),
+                eq=eq,
             ),
-            eq,
         )
+        obj.build()
         scalar_objective = obj.compute_scalar(obj.x(eq))
         print(
             f"obj: {scalar_objective:11.9g}  file: {filename}  helicity_n: {helicity_n}"
@@ -146,9 +147,10 @@ def test_independent_of_size_and_B():
             QuasisymmetryTwoTermNormalized(
                 grid=grid,
                 helicity=(1, 1),
+                eq=eq,
             ),
-            eq,
         )
+        obj.build()
         scalar_objective = obj.compute_scalar(obj.x(eq))
         print(f"obj: {scalar_objective:11.9g}  file: {filename}")
         assert np.abs(scalar_objective) > 0.01

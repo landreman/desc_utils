@@ -7,7 +7,6 @@ import numpy as np
 from desc.backend import jnp
 from desc.compute import compute as compute_fun
 from desc.compute import get_params, get_profiles, get_transforms
-from desc.compute.utils import compress
 from desc.grid import LinearGrid
 from desc.utils import Timer
 
@@ -77,7 +76,6 @@ class BootstrapRedlConsistencyNormalized(_Objective):
     """
 
     _scalar = False
-    _linear = False
     _units = "(dimensionless)"
     _print_value_fmt = "Bootstrap current self-consistency: {:10.3e} "
 
@@ -85,7 +83,7 @@ class BootstrapRedlConsistencyNormalized(_Objective):
         self,
         helicity=(1, 0),
         eq=None,
-        target=0,
+        target=None,
         bounds=None,
         weight=1,
         normalize=False,
@@ -93,11 +91,13 @@ class BootstrapRedlConsistencyNormalized(_Objective):
         grid=None,
         name="Bootstrap current self-consistency (Redl)",
     ):
+        if target is None and bounds is None:
+            target = 0
         assert (len(helicity) == 2) and (int(helicity[1]) == helicity[1])
         assert helicity[0] == 1, "Redl bootstrap current model assumes helicity[0] == 1"
 
         self.helicity = helicity
-        self.grid = grid
+        self._grid = grid
         super().__init__(
             eq=eq,
             target=target,
@@ -108,7 +108,7 @@ class BootstrapRedlConsistencyNormalized(_Objective):
             name=name,
         )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -121,21 +121,28 @@ class BootstrapRedlConsistencyNormalized(_Objective):
             Level of output.
 
         """
-        if self.grid is None:
-            self.grid = LinearGrid(
+        eq = eq or self._eq
+        if self._grid is None:
+            grid = LinearGrid(
                 M=eq.M_grid,
                 N=eq.N_grid,
                 NFP=eq.NFP,
                 sym=eq.sym,
                 rho=np.linspace(1 / 5, 1, 5),
             )
+        else:
+            grid = self._grid
 
         assert (
             self.helicity[1] == 0 or abs(self.helicity[1]) == eq.NFP
         ), "Helicity toroidal mode number should be 0 (QA) or +/- NFP (QH)"
-        self._dim_f = self.grid.num_rho
+        self._dim_f = grid.num_rho
         self._data_keys = ["<J*B>", "<J*B> Redl"]
-        self._args = get_params(self._data_keys)
+        self._args = get_params(
+            self._data_keys,
+            obj="desc.equilibrium.equilibrium.Equilibrium",
+            has_axis=grid.axis.size,
+        )
 
         if eq.electron_temperature is None:
             raise RuntimeError(
@@ -153,7 +160,7 @@ class BootstrapRedlConsistencyNormalized(_Objective):
 
         # Try to catch cases in which density or temperatures are specified in the
         # wrong units. Densities should be ~ 10^20, temperatures are ~ 10^3.
-        rho = eq.compute("rho", grid=self.grid)["rho"]
+        rho = eq.compute("rho", grid=grid)["rho"]
         if jnp.any(eq.electron_temperature(rho) > 50e3):
             warnings.warn(
                 "Electron temperature is surprisingly high. It should have units of eV"
@@ -183,8 +190,12 @@ class BootstrapRedlConsistencyNormalized(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
-        self._transforms = get_transforms(self._data_keys, eq=eq, grid=self.grid)
+        profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
+        self._constants = {
+            "transforms": transforms,
+            "profiles": profiles,
+        }
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -201,25 +212,24 @@ class BootstrapRedlConsistencyNormalized(_Objective):
             Bootstrap current self-consistency residual on each rho grid point.
 
         """
-        params = self._parse_args(*args, **kwargs)
-        extra_kwargs = {
-            "helicity": self.helicity,
-        }
+        params, constants = self._parse_args(*args, **kwargs)
+        if constants is None:
+            constants = self._constants
         data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
             params=params,
-            transforms=self._transforms,
-            profiles=self._profiles,
-            **extra_kwargs,
+            transforms=constants["transforms"],
+            profiles=constants["profiles"],
+            helicity=self.helicity,
         )
-
-        rho_weights = compress(self.grid, self.grid.spacing[:, 0])
+        grid = constants["transforms"]["grid"]
+        rho_weights = grid.compress(grid.spacing[:, 0])
 
         denominator = jnp.sum(
-            (data["<J*B>"] + data["<J*B> Redl"]) ** 2 * self.grid.weights
+            (data["<J*B>"] + data["<J*B> Redl"]) ** 2 * grid.weights
         ) / (4 * jnp.pi * jnp.pi)
 
-        return compress(
-            self.grid,
+        return grid.compress(
             (data["<J*B>"] - data["<J*B> Redl"]),
         ) * jnp.sqrt(rho_weights / denominator)

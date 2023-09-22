@@ -5,9 +5,8 @@ from desc.compute import (
     get_profiles,
     get_transforms,
 )
-from desc.compute.utils import compress
+from desc.grid import LinearGrid, QuadratureGrid
 from desc.objectives.objective_funs import _Objective
-from desc.transform import Transform
 from desc.utils import Timer
 
 
@@ -44,14 +43,14 @@ class GradRho0(_Objective):
     """
 
     _scalar = False
-    _linear = False
     _units = "(dimensionless)"
     _print_value_fmt = "|grad rho| penalty: {:10.3e} "
 
     def __init__(
         self,
         eq=None,
-        target=0,
+        target=None,
+        bounds=None,
         weight=1,
         normalize=False,
         normalize_target=False,
@@ -60,20 +59,22 @@ class GradRho0(_Objective):
         name="|grad rho|",
         threshold=0.0,
     ):
-
-        self.surf_grid = surf_grid
-        self.vol_grid = vol_grid
+        if target is None and bounds is None:
+            target = 0
+        self._surf_grid = surf_grid
+        self._vol_grid = vol_grid
         self.threshold = threshold
         super().__init__(
             eq=eq,
             target=target,
+            bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
             name=name,
         )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -86,35 +87,60 @@ class GradRho0(_Objective):
             Level of output.
 
         """
-        if self.surf_grid is None:
-            self.surf_grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, rho=[1.0], NFP=eq.NFP)
-        if self.vol_grid is None:
-            self.vol_grid = QuadratureGrid(
+        eq = eq or self._eq
+        if self._surf_grid is None:
+            surf_grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, rho=[1.0], NFP=eq.NFP)
+        else:
+            surf_grid = self._surf_grid
+
+        if self._vol_grid is None:
+            vol_grid = QuadratureGrid(
                 L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP
             )
+        else:
+            vol_grid = self._vol_grid
 
-        self._dim_f = self.surf_grid.num_nodes
+        self._dim_f = surf_grid.num_nodes
         self._surf_data_keys = ["sqrt(g)", "|grad(rho)|"]
         self._vol_data_keys = ["a"]
-        self._args = get_params(self._surf_data_keys)
+        self._surf_args = get_params(
+            self._surf_data_keys,
+            obj="desc.equilibrium.equilibrium.Equilibrium",
+            has_axis=surf_grid.axis.size,
+        )
+        self._vol_args = get_params(
+            self._vol_data_keys,
+            obj="desc.equilibrium.equilibrium.Equilibrium",
+            has_axis=vol_grid.axis.size,
+        )
+        # We must set self._args.
+        # Both _surf_args and _vol_args are ['R_lmn', 'Z_lmn'], so we can use
+        # either for this.
+        self._args = self._surf_args
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._surf_profiles = get_profiles(
-            self._surf_data_keys, eq=eq, grid=self.surf_grid
+        surf_profiles = get_profiles(
+            self._surf_data_keys, obj=eq, grid=surf_grid
         )
-        self._surf_transforms = get_transforms(
-            self._surf_data_keys, eq=eq, grid=self.surf_grid
+        surf_transforms = get_transforms(
+            self._surf_data_keys, obj=eq, grid=surf_grid
         )
-        self._vol_profiles = get_profiles(
-            self._vol_data_keys, eq=eq, grid=self.vol_grid
+        vol_profiles = get_profiles(
+            self._vol_data_keys, obj=eq, grid=vol_grid
         )
-        self._vol_transforms = get_transforms(
-            self._vol_data_keys, eq=eq, grid=self.vol_grid
+        vol_transforms = get_transforms(
+            self._vol_data_keys, obj=eq, grid=vol_grid
         )
+        self._constants = {
+            "vol_transforms": vol_transforms,
+            "vol_profiles": vol_profiles,
+            "surf_transforms": surf_transforms,
+            "surf_profiles": surf_profiles,
+        }
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -137,23 +163,29 @@ class GradRho0(_Objective):
         V : float
 
         """
-        params = self._parse_args(*args, **kwargs)
-        surf_data = compute_fun(
-            self._surf_data_keys,
-            params=params,
-            transforms=self._surf_transforms,
-            profiles=self._surf_profiles,
-        )
+        params, constants = self._parse_args(*args, **kwargs)
+        if constants is None:
+            constants = self._constants
         vol_data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
             self._vol_data_keys,
             params=params,
-            transforms=self._vol_transforms,
-            profiles=self._vol_profiles,
+            transforms=constants["vol_transforms"],
+            profiles=constants["vol_profiles"],
         )
+        surf_data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
+            self._surf_data_keys,
+            params=params,
+            transforms=constants["surf_transforms"],
+            profiles=constants["surf_profiles"],
+        )
+        vol_grid = constants["vol_transforms"]["grid"]
+        surf_grid = constants["surf_transforms"]["grid"]
 
-        Vprime = jnp.sum(self.surf_grid.weights * surf_data["sqrt(g)"])
+        Vprime = jnp.sum(surf_grid.weights * surf_data["sqrt(g)"])
         return jnp.sqrt(
-            self.surf_grid.weights * surf_data["sqrt(g)"] / Vprime
+            surf_grid.weights * surf_data["sqrt(g)"] / Vprime
         ) * jnp.maximum(0.0, vol_data["a"] * surf_data["|grad(rho)|"] - self.threshold)
 
 
@@ -192,14 +224,14 @@ class GradRho(_Objective):
     """
 
     _scalar = False
-    _linear = False
     _units = "(dimensionless)"
     _print_value_fmt = "|grad rho| penalty: {:10.3e} "
 
     def __init__(
         self,
         eq=None,
-        target=0,
+        target=None,
+        bounds=None,
         weight=1,
         normalize=False,
         normalize_target=False,
@@ -208,20 +240,22 @@ class GradRho(_Objective):
         name="|grad rho|",
         threshold=0.0,
     ):
-
-        self.grid = grid
+        if target is None and bounds is None:
+            target = 0
+        self._grid = grid
         self.a_minor = a_minor
         self.threshold = threshold
         super().__init__(
             eq=eq,
             target=target,
+            bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
             name=name,
         )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -234,20 +268,31 @@ class GradRho(_Objective):
             Level of output.
 
         """
-        if self.grid is None:
-            self.grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, rho=[1.0], NFP=eq.NFP)
+        eq = eq or self._eq
+        if self._grid is None:
+            grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, rho=[1.0], NFP=eq.NFP)
+        else:
+            grid = self._grid
 
-        self._dim_f = self.grid.num_nodes
+        self._dim_f = grid.num_nodes
         self._data_keys = ["sqrt(g)", "|grad(rho)|"]
-        self._args = get_params(self._data_keys)
+        self._args = get_params(
+            self._data_keys,
+            obj="desc.equilibrium.equilibrium.Equilibrium",
+            has_axis=grid.axis.size,
+        )
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
-        self._transforms = get_transforms(self._data_keys, eq=eq, grid=self.grid)
+        profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
+        self._constants = {
+            "transforms": transforms,
+            "profiles": profiles,
+        }
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -270,15 +315,19 @@ class GradRho(_Objective):
         V : float
 
         """
-        params = self._parse_args(*args, **kwargs)
+        params, constants = self._parse_args(*args, **kwargs)
+        if constants is None:
+            constants = self._constants
         data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
             params=params,
-            transforms=self._transforms,
-            profiles=self._profiles,
+            transforms=constants["transforms"],
+            profiles=constants["profiles"],
         )
+        grid = constants["transforms"]["grid"]
 
-        Vprime = jnp.sum(self.grid.weights * data["sqrt(g)"])
-        return jnp.sqrt(self.grid.weights * data["sqrt(g)"] / Vprime) * jnp.maximum(
+        Vprime = jnp.sum(grid.weights * data["sqrt(g)"])
+        return jnp.sqrt(grid.weights * data["sqrt(g)"] / Vprime) * jnp.maximum(
             0.0, self.a_minor * data["|grad(rho)|"] - self.threshold
         )
