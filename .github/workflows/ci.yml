@@ -1,0 +1,42 @@
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: [3.8, 3.11]
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: pwd
+      run: pwd
+
+    - name: ls
+      run: ls -l
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: which pip after python setup
+      run: |
+        python -m pip install --upgrade pip
+        pip --version
+
+    - name: Install python dependencies
+      run: |
+        pip install -r requirements.txt
+
+    - name: Install package
+      run: pip install -v .
+
+    - name: Run tests
+      run: pytest
+
