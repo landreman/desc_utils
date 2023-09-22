@@ -5,7 +5,6 @@ import pytest
 
 import desc.io
 from desc.grid import LinearGrid, QuadratureGrid
-from desc.optimize import Optimizer
 from desc.objectives import *
 
 from desc_utils import Mercier_normalization, MercierThreshold
@@ -84,10 +83,13 @@ def test_mercier_value():
         except:
             pass
 
+        # Need to over-sample because otherwise eq.compute() switches to higher-resolution grids
+        # for 0D and flux-function quantities, causing the 2 methods of
+        # computing D_Mercier to give different values. See desc issue #683
         grid = QuadratureGrid(
-            L=eq.L,
-            M=eq.M,
-            N=eq.N,
+            L=eq.L_grid,
+            M=eq.M_grid,
+            N=eq.N_grid,
             NFP=eq.NFP,
         )
 
@@ -123,8 +125,7 @@ def test_mercier_value():
                 f"threshold: {threshold}  obj: {scalar_objective:11.9g}  expected: {expected}  rel diff: {rel_diff}"
             )
             np.testing.assert_allclose(
-                #scalar_objective, expected, rtol=1e-8, atol=1e-15
-                scalar_objective, expected, rtol=1e-4, atol=1e-6
+                scalar_objective, expected, rtol=1e-8, atol=1e-15
             )
 
             return scalar_objective
