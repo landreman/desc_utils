@@ -362,9 +362,210 @@ class dBdThetaHeuristic(_Objective):
     w is a dimensionless weight that emphasizes regions in which |∂B/∂ζ| is small.
     The exact defintion is
 
-    w = 1 / [1 + sharpness * (∂B/∂ζ)² / ⟨(∂B/∂ζ)²⟩].
+    w = 1 / [1 + sharpness * (∂B/∂ζ)² / ⟨(∂B/∂ζ)²⟩]
 
-    Larger values of sharpness cause the weight to
+    or
+
+    w = exp(-sharpness * (∂B/∂ζ)² / ⟨(∂B/∂ζ)²⟩)
+
+    or
+
+    w = exp(-sharpness * (∂B/∂ζ)⁴ / ⟨(∂B/∂ζ)⁴⟩)
+
+    Larger values of sharpness cause the weight to be focused more on regions in
+    which |∂B/∂ζ| is small.
+
+
+    Parameters
+    ----------
+    sharpness : float
+        Sharpness.
+    weight_func : str
+        "rational", "exp", or "exp2"
+
+    """
+
+    _scalar = False
+    _units = "(dimensionless)"
+    _print_value_fmt = "dBdThetaHeuristic: {:10.3e} "
+
+    def __init__(
+        self,
+        eq=None,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=False,
+        normalize_target=False,
+        grid=None,
+        name="dBdThetaHeuristic",
+        sharpness=1.0,
+        weight_func="exp",
+    ):
+        if target is None and bounds is None:
+            target = 0
+        self._grid = grid
+        self.sharpness = sharpness
+
+        def weight_rational(sharpness, dB_dzeta_squared_normalized):
+            return 1 / (1 + sharpness * dB_dzeta_squared_normalized)
+
+        def weight_exp(sharpness, dB_dzeta_squared_normalized):
+            return jnp.exp(-sharpness * dB_dzeta_squared_normalized)
+
+        def weight_exp2(sharpness, dB_dzeta_squared_normalized):
+            return jnp.exp(-sharpness * dB_dzeta_squared_normalized**2)
+
+        if weight_func == "rational":
+            self.weight_function = weight_rational
+        elif weight_func == "exp":
+            self.weight_function = weight_exp
+        elif weight_func == "exp2":
+            self.weight_function = weight_exp2
+        else:
+            raise RuntimeError("Invalid setting for 'function'")
+
+        super().__init__(
+            eq=eq,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
+
+    def build(self, eq=None, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = eq or self._eq
+        if self._grid is None:
+            grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, rho=[1.0], NFP=eq.NFP)
+        else:
+            grid = self._grid
+
+        self._dim_f = grid.num_nodes
+        self._data_keys = [
+            "iota",
+            "B0",
+            "B_theta",
+            "B_zeta",
+            "|B|_t",
+            "|B|_z",
+            "G",
+            "I",
+            "B*grad(|B|)",
+            "|B|",
+            "sqrt(g)",
+        ]
+        self._args = get_params(
+            self._data_keys,
+            obj="desc.equilibrium.equilibrium.Equilibrium",
+            has_axis=grid.axis.size,
+        )
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
+        self._constants = {
+            "transforms": transforms,
+            "profiles": profiles,
+        }
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+
+    def compute(self, *args, **kwargs):
+        """Compute objective
+
+        Parameters
+        ----------
+        R_lmn : ndarray
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
+        Z_lmn : ndarray
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
+
+        Returns
+        -------
+        V : float
+
+        """
+        params, constants = self._parse_args(*args, **kwargs)
+        if constants is None:
+            constants = self._constants
+        data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
+            self._data_keys,
+            params=params,
+            transforms=constants["transforms"],
+            profiles=constants["profiles"],
+        )
+        grid = constants["transforms"]["grid"]
+
+        B2 = data["|B|"] ** 2
+
+        B_cross_grad_modB_dot_grad_psi = data["B0"] * (
+            data["B_theta"] * data["|B|_z"] - data["B_zeta"] * data["|B|_t"]
+        )
+
+        dB_dtheta = (
+            data["I"] * data["B*grad(|B|)"] - B_cross_grad_modB_dot_grad_psi
+        ) / B2
+
+        dB_dzeta = (
+            data["G"] * data["B*grad(|B|)"]
+            - data["iota"] * B_cross_grad_modB_dot_grad_psi
+        ) / B2
+
+        dB_dzeta_squared = dB_dzeta**2
+        dB_dzeta_avg_squared = surface_averages(
+            grid, dB_dzeta_squared, sqrt_g=data["sqrt(g)"]
+        )
+        weight = self.weight_function(
+            self.sharpness, dB_dzeta_squared / dB_dzeta_avg_squared
+        )
+
+        Vprime = jnp.sum(grid.weights * data["sqrt(g)"])
+
+        return (
+            2
+            * jnp.pi
+            * dB_dtheta
+            / data["|B|"]
+            * jnp.sqrt(weight * data["sqrt(g)"] * grid.weights / Vprime)
+        )
+
+
+class dBdThetaHeuristicExp2(_Objective):
+    """
+
+    f = ½ ⟨w (∂B/∂θ / B)²⟩
+
+    where ⟨ ⟩ is a flux surface average, θ and ζ are Boozer angles, and
+    w is a dimensionless weight that emphasizes regions in which |∂B/∂ζ| is small.
+    The exact defintion is
+
+    w = exp(-sharpness * (∂B/∂ζ)² / ⟨(∂B/∂ζ)²⟩).
+
+    Larger values of sharpness cause the weight to be focused more on regions in
+    which |∂B/∂ζ| is small.
 
 
 
@@ -524,7 +725,7 @@ class dBdThetaHeuristic(_Objective):
         dB_dzeta_avg_squared = surface_averages(
             grid, dB_dzeta_squared, sqrt_g=data["sqrt(g)"]
         )
-        weight = 1 / (1 + self.sharpness * dB_dzeta_squared / dB_dzeta_avg_squared)
+        weight = jnp.exp(-self.sharpness * dB_dzeta_squared / dB_dzeta_avg_squared)
 
         Vprime = jnp.sum(grid.weights * data["sqrt(g)"])
 

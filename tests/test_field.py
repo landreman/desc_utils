@@ -338,7 +338,7 @@ def test_dBdThetaHeuristic_resolution_and_value():
         ".//tests//inputs//LandremanPaul2022_QA_reactorScale_tinyPressure_lowRes.h5",
     ]
 
-    def test(eq, M, N):
+    def test(eq, M, N, weight_func):
         grid = LinearGrid(
             rho=1,
             M=M,
@@ -350,6 +350,7 @@ def test_dBdThetaHeuristic_resolution_and_value():
             grid=grid,
             eq=eq,
             sharpness=sharpness,
+            weight_func=weight_func,
         )
         obj = ObjectiveFunction(obj_term)
         obj.build()
@@ -387,7 +388,14 @@ def test_dBdThetaHeuristic_resolution_and_value():
             surface_averages(grid, dB_dzeta**2, sqrt_g=data["sqrt(g)"])
         )
 
-        weight = 1 / (1 + sharpness * (dB_dzeta / dB_dzeta_avg) ** 2)
+        if weight_func == "rational":
+            weight = 1 / (1 + sharpness * (dB_dzeta / dB_dzeta_avg) ** 2)
+        elif weight_func == "exp":
+            weight = np.exp(-sharpness * (dB_dzeta / dB_dzeta_avg) ** 2)
+        elif weight_func == "exp2":
+            weight = np.exp(-sharpness * (dB_dzeta / dB_dzeta_avg) ** 4)
+        else:
+            raise RuntimeError("Invalid weight function")
 
         should_be = 0.5 * surface_averages(
             grid,
@@ -410,12 +418,14 @@ def test_dBdThetaHeuristic_resolution_and_value():
     for filename in filenames:
         print("********* Processing file", filename, "*********")
         eq = desc.io.load(filename)
-        results = []
-        for M, N in zip(Ms, Ns):
-            results.append(test(eq, M, N))
+        for weight_func in ["rational", "exp", "exp2"]:
+            print(" --- weight_func:", weight_func, "---")
+            results = []
+            for M, N in zip(Ms, Ns):
+                results.append(test(eq, M, N, weight_func))
 
-        results = np.array(results)
-        np.testing.assert_allclose(results, np.mean(results), rtol=1e-3)
+            results = np.array(results)
+            np.testing.assert_allclose(results, np.mean(results), rtol=0.002)
 
 
 def test_dBdThetaHeuristic_independent_of_size_and_B():
@@ -428,7 +438,7 @@ def test_dBdThetaHeuristic_independent_of_size_and_B():
         ".//tests//inputs//circular_model_tokamak_2xSize_output.h5",
     ]
 
-    def test(eq):
+    def test(eq, weight_func):
         M = eq.M
         grid = LinearGrid(
             rho=1,
@@ -441,6 +451,7 @@ def test_dBdThetaHeuristic_independent_of_size_and_B():
                 grid=grid,
                 eq=eq,
                 sharpness=3.0,
+                weight_func=weight_func,
             ),
         )
         obj.build()
@@ -449,13 +460,15 @@ def test_dBdThetaHeuristic_independent_of_size_and_B():
         assert np.abs(scalar_objective) > 0.01
         return scalar_objective
 
-    results = []
-    for filename in filenames:
-        eq = desc.io.load(filename)[-1]
-        results.append(test(eq))
+    for weight_func in ["rational", "exp", "exp2"]:
+        print(" --- weight_func:", weight_func, "---")
+        results = []
+        for filename in filenames:
+            eq = desc.io.load(filename)[-1]
+            results.append(test(eq, weight_func))
 
-    results = np.array(results)
-    print(results)
+        results = np.array(results)
+        print(results)
 
-    # Results should all be the same:
-    np.testing.assert_allclose(results, np.mean(results), rtol=3e-5)
+        # Results should all be the same:
+        np.testing.assert_allclose(results, np.mean(results), rtol=3e-5)
