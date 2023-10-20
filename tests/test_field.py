@@ -4,8 +4,9 @@ import pytest
 import desc.io
 from desc.grid import LinearGrid, QuadratureGrid
 from desc.objectives import *
+from desc.compute.utils import surface_averages
 
-from desc_utils import BTarget
+from desc_utils import BTarget, BContourAngle
 
 
 def test_BTarget_resolution():
@@ -92,7 +93,7 @@ def test_BTarget_independent_of_size_and_B():
             BTarget(
                 grid=grid,
                 eq=eq,
-                weight=1/typical_B,
+                weight=1 / typical_B,
             ),
         )
         obj.build()
@@ -154,6 +155,7 @@ def test_BTarget_value():
     for target in targets:
         test(target)
 
+
 def test_BTarget_value_axis():
     """ """
     filename = ".//tests//inputs//LandremanPaul2022_QA_reactorScale_lowRes.h5"
@@ -195,3 +197,133 @@ def test_BTarget_value_axis():
     targets = [-0.6, 0, 0.7]
     for target in targets:
         test(target)
+
+
+def test_BContourAngle_resolution_and_value():
+    """
+    Confirm that the BContourAngle objective function is
+    approximately independent of grid resolution.
+    """
+    filenames = [
+        ".//tests//inputs//LandremanPaul2022_QA_reactorScale_tinyPressure_lowRes.h5",
+    ]
+
+    def test(eq, M, N):
+        grid = LinearGrid(
+            rho=1,
+            M=M,
+            N=N,
+            NFP=eq.NFP,
+        )
+
+        regularization = 0.1
+        obj_term = BContourAngle(
+            grid=grid,
+            eq=eq,
+            regularization=regularization,
+        )
+        obj = ObjectiveFunction(obj_term)
+        obj.build()
+        scalar_objective = obj.compute_scalar(obj.x(eq))
+
+        data = eq.compute(
+            [
+                "iota",
+                "B0",
+                "B_theta",
+                "B_zeta",
+                "|B|_t",
+                "|B|_z",
+                "G",
+                "I",
+                "B*grad(|B|)",
+                "|B|",
+                "sqrt(g)",
+            ],
+            grid=grid,
+        )
+
+        B_cross_grad_B_dot_grad_psi = data["B0"] * (
+            -data["B_zeta"] * data["|B|_t"] + data["B_theta"] * data["|B|_z"]
+        )
+
+        dB_dtheta = (data["I"] * data["B*grad(|B|)"] - B_cross_grad_B_dot_grad_psi) / (
+            data["|B|"] ** 2
+        )
+        dB_dzeta = (
+            data["G"] * data["B*grad(|B|)"] - data["iota"] * B_cross_grad_B_dot_grad_psi
+        ) / (data["|B|"] ** 2)
+
+        squared_zeta_contour_component_regularized = (dB_dtheta**2) / (
+            dB_dtheta**2 + dB_dzeta**2 + regularization * data["|B|"] ** 2
+        )
+        should_be = 0.5 * surface_averages(
+            grid,
+            squared_zeta_contour_component_regularized,
+            sqrt_g=data["sqrt(g)"],
+            expand_out=False,
+        )
+        assert should_be.shape == (1,)
+        should_be = should_be[0]
+        print(
+            f"M: {M:2}  N: {N:2}  obj: {scalar_objective:11.9g}  should be: {should_be:11.9g}"
+        )
+        np.testing.assert_allclose(scalar_objective, should_be)
+        return scalar_objective
+
+    # Loop over grid resolutions:
+    Ms = [8, 16, 8]
+    Ns = [8, 8, 16]
+
+    for filename in filenames:
+        print("********* Processing file", filename, "*********")
+        eq = desc.io.load(filename)
+        results = []
+        for M, N in zip(Ms, Ns):
+            results.append(test(eq, M, N))
+
+        results = np.array(results)
+        np.testing.assert_allclose(results, np.mean(results), rtol=1e-3)
+
+
+def test_BContourAngle_independent_of_size_and_B():
+    """
+    The BTarget objective should be unchanged under scaling the size or field strength of a configuration
+    """
+    filenames = [
+        ".//tests//inputs//circular_model_tokamak_output.h5",
+        ".//tests//inputs//circular_model_tokamak_2xB_output.h5",
+        ".//tests//inputs//circular_model_tokamak_2xSize_output.h5",
+    ]
+
+    def test(eq):
+        M = eq.M
+        grid = LinearGrid(
+            rho=1,
+            M=M,
+            N=M,  # Note M instead of N here
+            NFP=eq.NFP,
+        )
+        obj = ObjectiveFunction(
+            BContourAngle(
+                grid=grid,
+                eq=eq,
+                regularization=0.1,
+            ),
+        )
+        obj.build()
+        scalar_objective = obj.compute_scalar(obj.x(eq))
+        print(f"obj: {scalar_objective:11.9g}  file: {filename}  M: {M}")
+        assert np.abs(scalar_objective) > 0.01
+        return scalar_objective
+
+    results = []
+    for filename in filenames:
+        eq = desc.io.load(filename)[-1]
+        results.append(test(eq))
+
+    results = np.array(results)
+    print(results)
+
+    # Results should all be the same:
+    np.testing.assert_allclose(results, np.mean(results), rtol=3e-5)
