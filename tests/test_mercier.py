@@ -35,6 +35,7 @@ def test_mercier_resolution():
             ),
         )
         obj.build()
+        obj.print_value(obj.x(eq))
         scalar_objective = obj.compute_scalar(obj.x(eq))
         print(
             f"obj: {scalar_objective:11.9g}  grid: {grid_type}  L: {L}  M: {M}  N: {N}"

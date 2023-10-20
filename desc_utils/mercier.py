@@ -70,7 +70,6 @@ class MercierThreshold(_Objective):
 
     """
 
-    _scalar = True
     _units = "(dimensionless)"
     _print_value_fmt = "Mercier threshold objective: {:10.3e} "
 
