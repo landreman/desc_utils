@@ -6,7 +6,7 @@ from desc.grid import LinearGrid, QuadratureGrid
 from desc.objectives import *
 from desc.compute.utils import surface_averages
 
-from desc_utils import BTarget, BContourAngle, dBdThetaHeuristic
+from desc_utils import BTarget, BContourAngle, dBdThetaHeuristic, BMaxMinHeuristic
 
 
 def test_BTarget_resolution():
@@ -472,3 +472,81 @@ def test_dBdThetaHeuristic_independent_of_size_and_B():
 
         # Results should all be the same:
         np.testing.assert_allclose(results, np.mean(results), rtol=3e-5)
+
+
+def test_BMaxMinHeuristic_resolution_and_value():
+    """
+    Confirm that the dBdThetaHeuristic objective function is
+    approximately independent of grid resolution.
+    """
+    filenames = [
+        ".//tests//inputs//LandremanPaul2022_QA_reactorScale_tinyPressure_lowRes.h5",
+    ]
+
+    def test(eq, M, N):
+        grid = LinearGrid(
+            rho=1,
+            M=M,
+            N=N,
+            NFP=eq.NFP,
+        )
+        obj_term = BMaxMinHeuristic(
+            grid=grid,
+            eq=eq,
+        )
+        obj = ObjectiveFunction(obj_term)
+        obj.build()
+        scalar_objective = obj.compute_scalar(obj.x(eq))
+
+        data = eq.compute(["|B|"], grid=grid)
+        B2D = data["|B|"].reshape(grid.num_zeta, grid.num_theta).T
+
+        max_over_zeta = np.max(B2D, axis=1)
+        min_over_zeta = np.min(B2D, axis=1)
+
+        should_be = 0.5 * (
+            (np.max(max_over_zeta) - np.min(max_over_zeta)) ** 2
+            + (np.max(min_over_zeta) - np.min(min_over_zeta)) ** 2
+        )
+        print(
+            f"M: {M:2}  N: {N:2}  obj: {scalar_objective:11.9g}  should be: {should_be:11.9g}"
+        )
+        np.testing.assert_allclose(scalar_objective, should_be)
+        # For QA, this objective should be large:
+        assert scalar_objective > 1.0
+        return scalar_objective
+
+    # Loop over grid resolutions:
+    Ms = [32, 64, 32]
+    Ns = [32, 32, 64]
+
+    for filename in filenames:
+        print("********* Processing file", filename, "*********")
+        eq = desc.io.load(filename)
+        results = []
+        for M, N in zip(Ms, Ns):
+            results.append(test(eq, M, N))
+
+        results = np.array(results)
+        np.testing.assert_allclose(results, np.mean(results), rtol=0.003)
+
+
+def test_BMaxMinHeuristic_QH_small():
+    """For QH, the objective should be small."""
+    filename = ".//tests//inputs//LandremanPaul2022_QH_reactorScale_lowRes.h5"
+    eq = desc.io.load(filename)
+    grid = LinearGrid(
+        rho=1,
+        M=32,
+        N=33,
+        NFP=eq.NFP,
+    )
+    obj_term = BMaxMinHeuristic(
+        grid=grid,
+        eq=eq,
+    )
+    obj = ObjectiveFunction(obj_term)
+    obj.build()
+    scalar_objective = obj.compute_scalar(obj.x(eq))
+    print("BMaxMinHeuristic for precise QH:", scalar_objective)
+    assert scalar_objective < 0.0002

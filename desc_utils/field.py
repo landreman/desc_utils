@@ -553,48 +553,16 @@ class dBdThetaHeuristic(_Objective):
         )
 
 
-class dBdThetaHeuristicExp2(_Objective):
+class BMaxMinHeuristic(_Objective):
     """
 
-    f = ½ ⟨w (∂B/∂θ / B)²⟩
-
-    where ⟨ ⟩ is a flux surface average, θ and ζ are Boozer angles, and
-    w is a dimensionless weight that emphasizes regions in which |∂B/∂ζ| is small.
-    The exact defintion is
-
-    w = exp(-sharpness * (∂B/∂ζ)² / ⟨(∂B/∂ζ)²⟩).
-
-    Larger values of sharpness cause the weight to be focused more on regions in
-    which |∂B/∂ζ| is small.
-
-
-
-    Parameters
-    ----------
-    eq : Equilibrium, optional
-        Equilibrium that will be optimized to satisfy the Objective.
-    target : float, ndarray, optional
-        Target value(s) of the objective. len(target) must be equal to
-        Objective.dim_f
-    weight : float, ndarray, optional
-        Weighting to apply to the Objective, relative to other Objectives.
-        len(weight) must be equal to Objective.dim_f
-    normalize : bool
-        Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool
-        Whether target should be normalized before comparing to computed values.
-        if `normalize` is `True` and the target is in physical units, this
-        should also be set to True.
-    grid : Grid, ndarray, optional
-        Collocation grid containing the nodes to evaluate at.
-    name : str
-        Name of the objective function.
+    Set weight = 1 / B_typical
 
     """
 
     _scalar = False
     _units = "(dimensionless)"
-    _print_value_fmt = "dBdThetaHeuristic: {:10.3e} "
+    _print_value_fmt = "BMaxMinHeuristic: {:10.3e} "
 
     def __init__(
         self,
@@ -605,13 +573,11 @@ class dBdThetaHeuristicExp2(_Objective):
         normalize=False,
         normalize_target=False,
         grid=None,
-        name="dBdThetaHeuristic",
-        sharpness=1.0,
+        name="BMaxMinHeuristic",
     ):
         if target is None and bounds is None:
             target = 0
         self._grid = grid
-        self.sharpness = sharpness
         super().__init__(
             eq=eq,
             target=target,
@@ -641,19 +607,9 @@ class dBdThetaHeuristicExp2(_Objective):
         else:
             grid = self._grid
 
-        self._dim_f = grid.num_nodes
+        self._dim_f = 2
         self._data_keys = [
-            "iota",
-            "B0",
-            "B_theta",
-            "B_zeta",
-            "|B|_t",
-            "|B|_z",
-            "G",
-            "I",
-            "B*grad(|B|)",
             "|B|",
-            "sqrt(g)",
         ]
         self._args = get_params(
             self._data_keys,
@@ -706,33 +662,14 @@ class dBdThetaHeuristicExp2(_Objective):
         )
         grid = constants["transforms"]["grid"]
 
-        B2 = data["|B|"] ** 2
+        B2D = data["|B|"].reshape((grid.num_theta, grid.num_zeta), order="F")
 
-        B_cross_grad_modB_dot_grad_psi = data["B0"] * (
-            data["B_theta"] * data["|B|_z"] - data["B_zeta"] * data["|B|_t"]
-        )
+        max_over_zeta = jnp.max(B2D, axis=1)
+        min_over_zeta = jnp.min(B2D, axis=1)
 
-        dB_dtheta = (
-            data["I"] * data["B*grad(|B|)"] - B_cross_grad_modB_dot_grad_psi
-        ) / B2
-
-        dB_dzeta = (
-            data["G"] * data["B*grad(|B|)"]
-            - data["iota"] * B_cross_grad_modB_dot_grad_psi
-        ) / B2
-
-        dB_dzeta_squared = dB_dzeta**2
-        dB_dzeta_avg_squared = surface_averages(
-            grid, dB_dzeta_squared, sqrt_g=data["sqrt(g)"]
-        )
-        weight = jnp.exp(-self.sharpness * dB_dzeta_squared / dB_dzeta_avg_squared)
-
-        Vprime = jnp.sum(grid.weights * data["sqrt(g)"])
-
-        return (
-            2
-            * jnp.pi
-            * dB_dtheta
-            / data["|B|"]
-            * jnp.sqrt(weight * data["sqrt(g)"] * grid.weights / Vprime)
+        return jnp.array(
+            [
+                jnp.max(max_over_zeta) - jnp.min(max_over_zeta),
+                jnp.max(min_over_zeta) - jnp.min(min_over_zeta),
+            ]
         )
