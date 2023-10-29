@@ -6,7 +6,13 @@ from desc.grid import LinearGrid, QuadratureGrid
 from desc.objectives import *
 from desc.compute.utils import surface_averages
 
-from desc_utils import BTarget, BContourAngle, dBdThetaHeuristic, BMaxMinHeuristic
+from desc_utils import (
+    BTarget,
+    BContourAngle,
+    dBdThetaHeuristic,
+    BMaxMinHeuristic,
+    GradB,
+)
 
 
 def test_BTarget_resolution():
@@ -550,3 +556,174 @@ def test_BMaxMinHeuristic_QH_small():
     scalar_objective = obj.compute_scalar(obj.x(eq))
     print("BMaxMinHeuristic for precise QH:", scalar_objective)
     assert scalar_objective < 0.0002
+
+
+def test_grad_B_resolution():
+    """
+    Confirm that the grad B objective function is
+    approximately independent of grid resolution.
+    """
+    filenames = [
+        ".//tests//inputs//LandremanPaul2022_QA_reactorScale_lowRes.h5",
+        ".//tests//inputs//HELIOTRON_MJL.h5",
+    ]
+
+    def test(eq, L, M, N):
+        a_minor = eq.compute("a")["a"]
+        B_avg = eq.compute("<|B|>_rms")["<|B|>_rms"]
+        grid = LinearGrid(
+            rho=1,
+            M=M,
+            N=N,
+            NFP=eq.NFP,
+        )
+        grad_B = eq.compute("|grad(B)|")["|grad(B)|"]
+        normalized_grad_B = a_minor / B_avg * np.max(grad_B)
+        obj = ObjectiveFunction(
+            GradB(
+                grid=grid,
+                threshold=0.3,
+                a_minor=a_minor,
+                B_target=B_avg,
+                eq=eq,
+            ),
+        )
+        obj.build()
+        scalar_objective = obj.compute_scalar(obj.x(eq))
+        print(
+            f"normalized_grad_B: {normalized_grad_B:11.9g}  obj: {scalar_objective:11.9g}  L: {L}  M: {M}  N: {N}"
+        )
+        return scalar_objective
+
+    # Loop over grid resolutions:
+    Ls = [8, 16, 8, 16, 8]
+    Ms = [8, 8, 16, 16, 8]
+    Ns = [8, 8, 8, 8, 16]
+
+    # Ls = [16, 32, 16, 32, 16]
+    # Ms = [16, 16, 32, 32, 16]
+    # Ns = [16, 16, 16, 16, 32]
+
+    for filename in filenames:
+        print("********* Processing file", filename, "*********")
+        eq = desc.io.load(filename)
+        results = []
+        for L, M, N in zip(Ls, Ms, Ns):
+            results.append(test(eq, L, M, N))
+
+        results = np.array(results)
+        np.testing.assert_allclose(results, np.mean(results), rtol=1e-3)
+
+
+def test_grad_B_threshold():
+    """
+    Confirm that the grad B objective function transitions from 0 to positive
+    when the threshold crosses the appropriate value.
+    """
+    filename = ".//tests//inputs//LandremanPaul2022_QA_reactorScale_lowRes.h5"
+    eq = desc.io.load(filename)
+
+    a_minor = eq.compute("a")["a"]
+    B_avg = eq.compute("<|B|>_rms")["<|B|>_rms"]
+    grid = LinearGrid(
+        rho=1,
+        M=eq.M * 2 + 1,
+        N=eq.N * 2 + 1,
+        NFP=eq.NFP,
+    )
+    grad_B = eq.compute("|grad(B)|")["|grad(B)|"]
+    max_normalized_grad_B = a_minor / B_avg * np.max(grad_B)
+
+    # Case 1: threshold = a_minor / B_avg * np.max(grad_B)
+    obj = ObjectiveFunction(
+        GradB(
+            grid=grid,
+            threshold=max_normalized_grad_B,
+            a_minor=a_minor,
+            B_target=B_avg,
+            eq=eq,
+        ),
+    )
+    obj.build()
+    scalar_objective = obj.compute_scalar(obj.x(eq))
+    np.testing.assert_allclose(scalar_objective, 0.0, atol=1e-9)
+
+    # Case 2: threshold > a_minor / B_avg * np.max(grad_B)
+    obj = ObjectiveFunction(
+        GradB(
+            grid=grid,
+            threshold=max_normalized_grad_B * 1.1,
+            a_minor=a_minor,
+            B_target=B_avg,
+            eq=eq,
+        ),
+    )
+    obj.build()
+    scalar_objective = obj.compute_scalar(obj.x(eq))
+    np.testing.assert_allclose(scalar_objective, 0.0)
+
+    # Case 3: threshold < a_minor / B_avg * np.max(grad_B)
+    obj = ObjectiveFunction(
+        GradB(
+            grid=grid,
+            threshold=max_normalized_grad_B * 0.9,
+            a_minor=a_minor,
+            B_target=B_avg,
+            eq=eq,
+        ),
+    )
+    obj.build()
+    scalar_objective = obj.compute_scalar(obj.x(eq))
+    print("scalar_objective:", scalar_objective)
+    assert scalar_objective > 1e-5
+
+
+def test_grad_B_independent_of_size_and_B():
+    """
+    The |grad B| objective should be unchanged under scaling the size or field
+    strength of a configuration, if the normalization values are set appropriately.
+    """
+    filenames = [
+        ".//tests//inputs//circular_model_tokamak_output.h5",
+        ".//tests//inputs//circular_model_tokamak_2xB_output.h5",
+        ".//tests//inputs//circular_model_tokamak_2xSize_output.h5",
+    ]
+
+    def test(eq):
+        a_minor = eq.compute("a")["a"]
+        B_avg = eq.compute("<|B|>_rms")["<|B|>_rms"]
+        grid = LinearGrid(
+            rho=1,
+            M=eq.M * 2,
+            N=eq.N * 2,
+            NFP=eq.NFP,
+        )
+        grad_B = eq.compute("|grad(B)|")["|grad(B)|"]
+        normalized_grad_B = a_minor / B_avg * np.max(grad_B)
+        obj = ObjectiveFunction(
+            GradB(
+                grid=grid,
+                threshold=0.7,
+                a_minor=a_minor,
+                B_target=B_avg,
+                eq=eq,
+            ),
+        )
+        obj.build()
+        scalar_objective = obj.compute_scalar(obj.x(eq))
+        print(
+            f"normalized_grad_B: {normalized_grad_B:11.9g}  obj: {scalar_objective:11.9g}  file: {filename}"
+        )
+        assert np.abs(scalar_objective) > 0.01
+        return scalar_objective
+
+    results = []
+    for filename in filenames:
+        eq = desc.io.load(filename)[-1]
+        results.append(test(eq))
+
+    results = np.array(results)
+    print(results)
+
+    # Results should all be the same:
+    np.testing.assert_allclose(results, np.mean(results), rtol=1e-4)

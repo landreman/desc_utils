@@ -1,5 +1,5 @@
 from .bootstrap import BootstrapRedlConsistencyNormalized
-from .field import BTarget, BContourAngle, dBdThetaHeuristic, BMaxMinHeuristic
+from .field import BTarget, BContourAngle, dBdThetaHeuristic, BMaxMinHeuristic, GradB
 from .grad_rho import GradRho, GradRho0
 from .iota import MeanIota, IotaAt
 from .magwell import MagneticWellThreshold

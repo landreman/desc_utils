@@ -673,3 +673,133 @@ class BMaxMinHeuristic(_Objective):
                 jnp.max(min_over_zeta) - jnp.min(min_over_zeta),
             ]
         )
+
+
+class GradB(_Objective):
+    """Penalty on short field scale length
+
+    f = (1/2) * < max[0, (a / B₀) * |grad B| - k] ** 2>
+    where k is a constant threshold, < .. > is a flux surface average,
+    a is target minor radius, and B₀ is a target field strength.
+
+    Parameters
+    ----------
+    a_minor : float
+        a in the formula above.
+    B_target : float
+        B₀ in the formula above.
+    threshold: float
+        k in the formula above.
+
+    """
+
+    _scalar = False
+    _units = "(dimensionless)"
+    _print_value_fmt = "|grad B| penalty: {:10.3e} "
+
+    def __init__(
+        self,
+        eq=None,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=False,
+        normalize_target=False,
+        grid=None,
+        a_minor=None,
+        B_target=None,
+        name="|grad B|",
+        threshold=0.0,
+    ):
+        if target is None and bounds is None:
+            target = 0
+        self._grid = grid
+        self.a_minor = a_minor
+        self.B_target = B_target
+        self.threshold = threshold
+        super().__init__(
+            eq=eq,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
+
+    def build(self, eq=None, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = eq or self._eq
+        if self._grid is None:
+            grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, rho=[1.0], NFP=eq.NFP)
+        else:
+            grid = self._grid
+
+        self._dim_f = grid.num_nodes
+        self._data_keys = ["sqrt(g)", "|grad(B)|"]
+        self._args = get_params(
+            self._data_keys,
+            obj="desc.equilibrium.equilibrium.Equilibrium",
+            has_axis=grid.axis.size,
+        )
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
+        self._constants = {
+            "transforms": transforms,
+            "profiles": profiles,
+        }
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+
+    def compute(self, *args, **kwargs):
+        """Compute objective
+
+        Parameters
+        ----------
+        R_lmn : ndarray
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
+        Z_lmn : ndarray
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
+
+        Returns
+        -------
+        V : float
+
+        """
+        params, constants = self._parse_args(*args, **kwargs)
+        if constants is None:
+            constants = self._constants
+        data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
+            self._data_keys,
+            params=params,
+            transforms=constants["transforms"],
+            profiles=constants["profiles"],
+        )
+        grid = constants["transforms"]["grid"]
+
+        Vprime = jnp.sum(grid.weights * data["sqrt(g)"])
+        return jnp.sqrt(grid.weights * data["sqrt(g)"] / Vprime) * jnp.maximum(
+            0.0, (self.a_minor / self.B_target) * data["|grad(B)|"] - self.threshold
+        )
