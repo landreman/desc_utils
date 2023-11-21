@@ -1,7 +1,6 @@
 from desc.backend import jnp
 from desc.compute import compute as compute_fun
 from desc.compute import (
-    get_params,
     get_profiles,
     get_transforms,
 )
@@ -48,12 +47,13 @@ class GradRho0(_Objective):
 
     def __init__(
         self,
-        eq=None,
+        eq,
         target=None,
         bounds=None,
         weight=1,
         normalize=False,
         normalize_target=False,
+        loss_function=None,
         vol_grid=None,
         surf_grid=None,
         name="|grad rho|",
@@ -65,16 +65,17 @@ class GradRho0(_Objective):
         self._vol_grid = vol_grid
         self.threshold = threshold
         super().__init__(
-            eq=eq,
+            things=eq,
             target=target,
             bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
+            loss_function=loss_function,
             name=name,
         )
 
-    def build(self, eq=None, use_jit=True, verbose=1):
+    def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -87,7 +88,7 @@ class GradRho0(_Objective):
             Level of output.
 
         """
-        eq = eq or self._eq
+        eq = self.things[0]
         if self._surf_grid is None:
             surf_grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, rho=[1.0], NFP=eq.NFP)
         else:
@@ -103,20 +104,6 @@ class GradRho0(_Objective):
         self._dim_f = surf_grid.num_nodes
         self._surf_data_keys = ["sqrt(g)", "|grad(rho)|"]
         self._vol_data_keys = ["a"]
-        self._surf_args = get_params(
-            self._surf_data_keys,
-            obj="desc.equilibrium.equilibrium.Equilibrium",
-            has_axis=surf_grid.axis.size,
-        )
-        self._vol_args = get_params(
-            self._vol_data_keys,
-            obj="desc.equilibrium.equilibrium.Equilibrium",
-            has_axis=vol_grid.axis.size,
-        )
-        # We must set self._args.
-        # Both _surf_args and _vol_args are ['R_lmn', 'Z_lmn'], so we can use
-        # either for this.
-        self._args = self._surf_args
 
         timer = Timer()
         if verbose > 0:
@@ -146,9 +133,9 @@ class GradRho0(_Objective):
         if verbose > 1:
             timer.disp("Precomputing transforms")
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, *args, **kwargs):
+    def compute(self, params, constants=None):
         """Compute objective
 
         Parameters
@@ -163,7 +150,6 @@ class GradRho0(_Objective):
         V : float
 
         """
-        params, constants = self._parse_args(*args, **kwargs)
         if constants is None:
             constants = self._constants
         vol_data = compute_fun(
@@ -229,12 +215,13 @@ class GradRho(_Objective):
 
     def __init__(
         self,
-        eq=None,
+        eq,
         target=None,
         bounds=None,
         weight=1,
         normalize=False,
         normalize_target=False,
+        loss_function=None,
         grid=None,
         a_minor=None,
         name="|grad rho|",
@@ -246,16 +233,17 @@ class GradRho(_Objective):
         self.a_minor = a_minor
         self.threshold = threshold
         super().__init__(
-            eq=eq,
+            things=eq,
             target=target,
             bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
+            loss_function=loss_function,
             name=name,
         )
 
-    def build(self, eq=None, use_jit=True, verbose=1):
+    def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -268,7 +256,7 @@ class GradRho(_Objective):
             Level of output.
 
         """
-        eq = eq or self._eq
+        eq = self.things[0]
         if self._grid is None:
             grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, rho=[1.0], NFP=eq.NFP)
         else:
@@ -276,11 +264,6 @@ class GradRho(_Objective):
 
         self._dim_f = grid.num_nodes
         self._data_keys = ["sqrt(g)", "|grad(rho)|"]
-        self._args = get_params(
-            self._data_keys,
-            obj="desc.equilibrium.equilibrium.Equilibrium",
-            has_axis=grid.axis.size,
-        )
 
         timer = Timer()
         if verbose > 0:
@@ -298,9 +281,9 @@ class GradRho(_Objective):
         if verbose > 1:
             timer.disp("Precomputing transforms")
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, *args, **kwargs):
+    def compute(self, params, constants=None):
         """Compute objective
 
         Parameters
@@ -315,7 +298,6 @@ class GradRho(_Objective):
         V : float
 
         """
-        params, constants = self._parse_args(*args, **kwargs)
         if constants is None:
             constants = self._constants
         data = compute_fun(

@@ -6,7 +6,7 @@ import numpy as np
 
 from desc.backend import jnp
 from desc.compute import compute as compute_fun
-from desc.compute import get_params, get_profiles, get_transforms
+from desc.compute import get_profiles, get_transforms
 from desc.grid import LinearGrid
 from desc.utils import Timer
 
@@ -81,13 +81,14 @@ class BootstrapRedlConsistencyNormalized(_Objective):
 
     def __init__(
         self,
+        eq,
         helicity=(1, 0),
-        eq=None,
         target=None,
         bounds=None,
         weight=1,
         normalize=False,
         normalize_target=False,
+        loss_function=None,
         grid=None,
         name="Bootstrap current self-consistency (Redl)",
     ):
@@ -99,16 +100,17 @@ class BootstrapRedlConsistencyNormalized(_Objective):
         self.helicity = helicity
         self._grid = grid
         super().__init__(
-            eq=eq,
+            things=eq,
             target=target,
             bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
+            loss_function=loss_function,
             name=name,
         )
 
-    def build(self, eq=None, use_jit=True, verbose=1):
+    def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -121,7 +123,7 @@ class BootstrapRedlConsistencyNormalized(_Objective):
             Level of output.
 
         """
-        eq = eq or self._eq
+        eq = self.things[0]
         if self._grid is None:
             grid = LinearGrid(
                 M=eq.M_grid,
@@ -138,11 +140,6 @@ class BootstrapRedlConsistencyNormalized(_Objective):
         ), "Helicity toroidal mode number should be 0 (QA) or +/- NFP (QH)"
         self._dim_f = grid.num_rho
         self._data_keys = ["<J*B>", "<J*B> Redl"]
-        self._args = get_params(
-            self._data_keys,
-            obj="desc.equilibrium.equilibrium.Equilibrium",
-            has_axis=grid.axis.size,
-        )
 
         if eq.electron_temperature is None:
             raise RuntimeError(
@@ -201,9 +198,9 @@ class BootstrapRedlConsistencyNormalized(_Objective):
         if verbose > 1:
             timer.disp("Precomputing transforms")
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, *args, **kwargs):
+    def compute(self, params, constants=None):
         """Compute the bootstrap current self-consistency objective.
 
         Returns
@@ -212,7 +209,6 @@ class BootstrapRedlConsistencyNormalized(_Objective):
             Bootstrap current self-consistency residual on each rho grid point.
 
         """
-        params, constants = self._parse_args(*args, **kwargs)
         if constants is None:
             constants = self._constants
         data = compute_fun(

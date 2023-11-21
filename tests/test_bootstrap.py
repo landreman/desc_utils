@@ -303,7 +303,7 @@ class TestBootstrapObjectives:
         eq.solve(
             verbose=3,
             ftol=1e-8,
-            constraints=get_fixed_boundary_constraints(kinetic=True, eq=eq),
+            constraints=get_fixed_boundary_constraints(eq=eq),
             optimizer=Optimizer("lsq-exact"),
             objective=ObjectiveFunction(objectives=ForceBalance(eq=eq)),
         )
@@ -420,7 +420,7 @@ class TestBootstrapObjectives:
         eq.solve(
             verbose=3,
             ftol=1e-8,
-            constraints=get_fixed_boundary_constraints(kinetic=True, iota=False, eq=eq),
+            constraints=get_fixed_boundary_constraints(eq=eq),
             optimizer=Optimizer("lsq-exact"),
             objective=ObjectiveFunction(objectives=ForceBalance(eq=eq)),
         )

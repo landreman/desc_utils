@@ -1,7 +1,6 @@
 from desc.backend import jnp
 from desc.compute import compute as compute_fun
 from desc.compute import (
-    get_params,
     get_profiles,
     get_transforms,
 )
@@ -45,12 +44,13 @@ class AxisymmetryBarrier(_Objective):
 
     def __init__(
         self,
-        eq=None,
+        eq,
         target=None,
         bounds=None,
         weight=1,
         normalize=False,
         normalize_target=False,
+        loss_function=None,
         grid=None,
         name="Axisymmetry barrier",
         R_threshold=0.0,
@@ -64,16 +64,17 @@ class AxisymmetryBarrier(_Objective):
         self.R_threshold = R_threshold
         self.Z_threshold = Z_threshold
         super().__init__(
-            eq=eq,
+            things=eq,
             target=target,
             bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
+            loss_function=loss_function,
             name=name,
         )
 
-    def build(self, eq=None, use_jit=True, verbose=1):
+    def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -86,7 +87,7 @@ class AxisymmetryBarrier(_Objective):
             Level of output.
 
         """
-        eq = eq or self._eq
+        eq = self.things[0]
         # if self.grid is None:
         #    self.grid = QuadratureGrid(
         #        L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP
@@ -94,11 +95,6 @@ class AxisymmetryBarrier(_Objective):
 
         self._dim_f = 2
         self._data_keys = ["R", "Z"]
-        self._args = get_params(
-            self._data_keys,
-            obj="desc.equilibrium.equilibrium.Equilibrium",
-            has_axis=False,  # MJL 20230921 Not sure about this line
-        )
 
         index = None
         modes = eq.R_basis.modes
@@ -136,9 +132,9 @@ class AxisymmetryBarrier(_Objective):
         if verbose > 1:
             timer.disp("Precomputing transforms")
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, *args, **kwargs):
+    def compute(self, params, constants=None):
         """Compute objective
 
         Parameters
@@ -153,7 +149,6 @@ class AxisymmetryBarrier(_Objective):
         V : float
 
         """
-        params, constants = self._parse_args(*args, **kwargs)
         R001 = params["R_lmn"][self.R_index]
         Z001 = params["Z_lmn"][self.Z_index]
         return jnp.array(

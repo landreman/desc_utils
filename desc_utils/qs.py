@@ -1,7 +1,6 @@
 from desc.backend import jnp
 from desc.compute import compute as compute_fun
 from desc.compute import (
-    get_params,
     get_profiles,
     get_transforms,
 )
@@ -48,12 +47,13 @@ class QuasisymmetryTwoTermNormalized(_Objective):
 
     def __init__(
         self,
-        eq=None,
+        eq,
         target=None,
         bounds=None,
         weight=1,
         normalize=False,
         normalize_target=False,
+        loss_function=None,
         grid=None,
         helicity=(1, 0),
         name="QS two-term normalized",
@@ -63,16 +63,17 @@ class QuasisymmetryTwoTermNormalized(_Objective):
         self._grid = grid
         self._helicity = helicity
         super().__init__(
-            eq=eq,
+            things=eq,
             target=target,
             bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
+            loss_function=loss_function,
             name=name,
         )
 
-    def build(self, eq=None, use_jit=True, verbose=1):
+    def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -85,7 +86,7 @@ class QuasisymmetryTwoTermNormalized(_Objective):
             Level of output.
 
         """
-        eq = eq or self._eq
+        eq = self.things[0]
         if self._grid is None:
             grid = QuadratureGrid(
                 L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym
@@ -95,11 +96,6 @@ class QuasisymmetryTwoTermNormalized(_Objective):
 
         self._dim_f = grid.num_nodes
         self._data_keys = ["f_C", "|B|", "sqrt(g)"]
-        self._args = get_params(
-            self._data_keys,
-            obj="desc.equilibrium.equilibrium.Equilibrium",
-            has_axis=grid.axis.size,
-        )
 
         timer = Timer()
         if verbose > 0:
@@ -117,9 +113,9 @@ class QuasisymmetryTwoTermNormalized(_Objective):
         if verbose > 1:
             timer.disp("Precomputing transforms")
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, *args, **kwargs):
+    def compute(self, params, constants=None):
         """Compute quasi-symmetry two-term errors.
 
         Parameters
@@ -143,7 +139,6 @@ class QuasisymmetryTwoTermNormalized(_Objective):
             Quasi-symmetry flux function error at each node.
 
         """
-        params, constants = self._parse_args(*args, **kwargs)
         if constants is None:
             constants = self._constants
         data = compute_fun(

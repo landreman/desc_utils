@@ -3,7 +3,6 @@
 from desc.backend import jnp
 from desc.compute import compute as compute_fun
 from desc.compute import (
-    get_params,
     get_profiles,
     get_transforms,
 )
@@ -47,12 +46,13 @@ class MeanIota(_Objective):
 
     def __init__(
         self,
-        eq=None,
+        eq,
         target=None,
         bounds=None,
         weight=1,
         normalize=False,
         normalize_target=False,
+        loss_function=None,
         grid=None,
         name="mean rotational transform",
     ):
@@ -60,16 +60,17 @@ class MeanIota(_Objective):
             target = 0
         self._grid = grid
         super().__init__(
-            eq=eq,
+            things=eq,
             target=target,
             bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
+            loss_function=loss_function,
             name=name,
         )
 
-    def build(self, eq=None, use_jit=True, verbose=1):
+    def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -81,7 +82,7 @@ class MeanIota(_Objective):
         verbose : int, optional
             Level of output.
         """
-        eq = eq or self._eq
+        eq = self.things[0]
         if self._grid is None:
             grid = QuadratureGrid(
                 L=eq.L_grid,
@@ -95,11 +96,6 @@ class MeanIota(_Objective):
 
         self._dim_f = 1
         self._data_keys = ["iota"]
-        self._args = get_params(
-            self._data_keys,
-            obj="desc.equilibrium.equilibrium.Equilibrium",
-            has_axis=grid.axis.size,
-        )
 
         timer = Timer()
         if verbose > 0:
@@ -117,9 +113,9 @@ class MeanIota(_Objective):
         if verbose > 1:
             timer.disp("Precomputing transforms")
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, *args, **kwargs):
+    def compute(self, params, constants=None):
         """Compute rotational transform profile errors.
 
         Parameters
@@ -142,7 +138,6 @@ class MeanIota(_Objective):
         iota : ndarray
             rotational transform on specified flux surfaces.
         """
-        params, constants = self._parse_args(*args, **kwargs)
         if constants is None:
             constants = self._constants
         data = compute_fun(
@@ -197,12 +192,13 @@ class IotaAt(_Objective):
 
     def __init__(
         self,
-        eq=None,
+        eq,
         target=None,
         bounds=None,
         weight=1,
         normalize=False,
         normalize_target=False,
+        loss_function=None,
         grid=None,
         name="rotational transform",
     ):
@@ -210,16 +206,17 @@ class IotaAt(_Objective):
             target = 0
         self._grid = grid
         super().__init__(
-            eq=eq,
+            things=eq,
             target=target,
             bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
+            loss_function=loss_function,
             name=name,
         )
 
-    def build(self, eq=None, use_jit=True, verbose=1):
+    def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -231,7 +228,7 @@ class IotaAt(_Objective):
         verbose : int, optional
             Level of output.
         """
-        eq = eq or self._eq
+        eq = self.things[0]
         if self._grid is None:
             grid = LinearGrid(
                 rho=0.5,
@@ -251,11 +248,6 @@ class IotaAt(_Objective):
 
         self._dim_f = 1
         self._data_keys = ["iota"]
-        self._args = get_params(
-            self._data_keys,
-            obj="desc.equilibrium.equilibrium.Equilibrium",
-            has_axis=grid.axis.size,
-        )
 
         timer = Timer()
         if verbose > 0:
@@ -273,9 +265,9 @@ class IotaAt(_Objective):
         if verbose > 1:
             timer.disp("Precomputing transforms")
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, *args, **kwargs):
+    def compute(self, params, constants=None):
         """Compute rotational transform profile errors.
 
         Parameters
@@ -298,7 +290,6 @@ class IotaAt(_Objective):
         iota : ndarray
             rotational transform on specified flux surfaces.
         """
-        params, constants = self._parse_args(*args, **kwargs)
         if constants is None:
             constants = self._constants
         data = compute_fun(

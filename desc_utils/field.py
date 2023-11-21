@@ -1,12 +1,11 @@
 from desc.backend import jnp
 from desc.compute import compute as compute_fun
 from desc.compute import (
-    get_params,
     get_profiles,
     get_transforms,
 )
 from desc.compute.utils import surface_averages
-from desc.grid import LinearGrid, QuadratureGrid
+from desc.grid import LinearGrid
 from desc.objectives.objective_funs import _Objective
 
 # from desc.objectives import ObjectiveFromUser
@@ -77,12 +76,13 @@ class BTarget(_Objective):
 
     def __init__(
         self,
-        eq=None,
+        eq,
         target=None,
         bounds=None,
         weight=1,
         normalize=False,
         normalize_target=False,
+        loss_function=None,
         grid=None,
         a_minor=None,
         name="BTarget",
@@ -93,16 +93,17 @@ class BTarget(_Objective):
         self._grid = grid
         self.B_target = B_target
         super().__init__(
-            eq=eq,
+            things=eq,
             target=target,
             bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
+            loss_function=loss_function,
             name=name,
         )
 
-    def build(self, eq=None, use_jit=True, verbose=1):
+    def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -115,7 +116,7 @@ class BTarget(_Objective):
             Level of output.
 
         """
-        eq = eq or self._eq
+        eq = self.things[0]
         if self._grid is None:
             grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, rho=[1.0], NFP=eq.NFP)
         else:
@@ -123,11 +124,6 @@ class BTarget(_Objective):
 
         self._dim_f = grid.num_nodes
         self._data_keys = ["|B|"]
-        self._args = get_params(
-            self._data_keys,
-            obj="desc.equilibrium.equilibrium.Equilibrium",
-            has_axis=grid.axis.size,
-        )
 
         timer = Timer()
         if verbose > 0:
@@ -145,9 +141,9 @@ class BTarget(_Objective):
         if verbose > 1:
             timer.disp("Precomputing transforms")
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, *args, **kwargs):
+    def compute(self, params, constants=None):
         """Compute objective
 
         Parameters
@@ -162,7 +158,6 @@ class BTarget(_Objective):
         V : float
 
         """
-        params, constants = self._parse_args(*args, **kwargs)
         if constants is None:
             constants = self._constants
         data = compute_fun(
@@ -215,12 +210,13 @@ class BContourAngle(_Objective):
 
     def __init__(
         self,
-        eq=None,
+        eq,
         target=None,
         bounds=None,
         weight=1,
         normalize=False,
         normalize_target=False,
+        loss_function=None,
         grid=None,
         name="BContourAngle",
         regularization=0.001,
@@ -232,16 +228,17 @@ class BContourAngle(_Objective):
         self.regularization = regularization
         self.dBdzeta_denom_fac = dBdzeta_denom_fac
         super().__init__(
-            eq=eq,
+            things=eq,
             target=target,
             bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
+            loss_function=loss_function,
             name=name,
         )
 
-    def build(self, eq=None, use_jit=True, verbose=1):
+    def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -254,7 +251,7 @@ class BContourAngle(_Objective):
             Level of output.
 
         """
-        eq = eq or self._eq
+        eq = self.things[0]
         if self._grid is None:
             grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, rho=[1.0], NFP=eq.NFP)
         else:
@@ -274,11 +271,6 @@ class BContourAngle(_Objective):
             "|B|",
             "sqrt(g)",
         ]
-        self._args = get_params(
-            self._data_keys,
-            obj="desc.equilibrium.equilibrium.Equilibrium",
-            has_axis=grid.axis.size,
-        )
 
         timer = Timer()
         if verbose > 0:
@@ -296,9 +288,9 @@ class BContourAngle(_Objective):
         if verbose > 1:
             timer.disp("Precomputing transforms")
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, *args, **kwargs):
+    def compute(self, params, constants=None):
         """Compute objective
 
         Parameters
@@ -313,7 +305,6 @@ class BContourAngle(_Objective):
         V : float
 
         """
-        params, constants = self._parse_args(*args, **kwargs)
         if constants is None:
             constants = self._constants
         data = compute_fun(
@@ -391,12 +382,13 @@ class dBdThetaHeuristic(_Objective):
 
     def __init__(
         self,
-        eq=None,
+        eq,
         target=None,
         bounds=None,
         weight=1,
         normalize=False,
         normalize_target=False,
+        loss_function=None,
         grid=None,
         name="dBdThetaHeuristic",
         sharpness=1.0,
@@ -426,16 +418,17 @@ class dBdThetaHeuristic(_Objective):
             raise RuntimeError("Invalid setting for 'function'")
 
         super().__init__(
-            eq=eq,
+            things=eq,
             target=target,
             bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
+            loss_function=loss_function,
             name=name,
         )
 
-    def build(self, eq=None, use_jit=True, verbose=1):
+    def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -448,7 +441,7 @@ class dBdThetaHeuristic(_Objective):
             Level of output.
 
         """
-        eq = eq or self._eq
+        eq = self.things[0]
         if self._grid is None:
             grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, rho=[1.0], NFP=eq.NFP)
         else:
@@ -468,11 +461,6 @@ class dBdThetaHeuristic(_Objective):
             "|B|",
             "sqrt(g)",
         ]
-        self._args = get_params(
-            self._data_keys,
-            obj="desc.equilibrium.equilibrium.Equilibrium",
-            has_axis=grid.axis.size,
-        )
 
         timer = Timer()
         if verbose > 0:
@@ -490,9 +478,9 @@ class dBdThetaHeuristic(_Objective):
         if verbose > 1:
             timer.disp("Precomputing transforms")
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, *args, **kwargs):
+    def compute(self, params, constants=None):
         """Compute objective
 
         Parameters
@@ -507,7 +495,6 @@ class dBdThetaHeuristic(_Objective):
         V : float
 
         """
-        params, constants = self._parse_args(*args, **kwargs)
         if constants is None:
             constants = self._constants
         data = compute_fun(
@@ -566,12 +553,13 @@ class BMaxMinHeuristic(_Objective):
 
     def __init__(
         self,
-        eq=None,
+        eq,
         target=None,
         bounds=None,
         weight=1,
         normalize=False,
         normalize_target=False,
+        loss_function=None,
         grid=None,
         name="BMaxMinHeuristic",
     ):
@@ -579,16 +567,17 @@ class BMaxMinHeuristic(_Objective):
             target = 0
         self._grid = grid
         super().__init__(
-            eq=eq,
+            things=eq,
             target=target,
             bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
+            loss_function=loss_function,
             name=name,
         )
 
-    def build(self, eq=None, use_jit=True, verbose=1):
+    def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -601,7 +590,7 @@ class BMaxMinHeuristic(_Objective):
             Level of output.
 
         """
-        eq = eq or self._eq
+        eq = self.things[0]
         if self._grid is None:
             grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, rho=[1.0], NFP=eq.NFP)
         else:
@@ -611,11 +600,6 @@ class BMaxMinHeuristic(_Objective):
         self._data_keys = [
             "|B|",
         ]
-        self._args = get_params(
-            self._data_keys,
-            obj="desc.equilibrium.equilibrium.Equilibrium",
-            has_axis=grid.axis.size,
-        )
 
         timer = Timer()
         if verbose > 0:
@@ -633,9 +617,9 @@ class BMaxMinHeuristic(_Objective):
         if verbose > 1:
             timer.disp("Precomputing transforms")
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, *args, **kwargs):
+    def compute(self, params, constants=None):
         """Compute objective
 
         Parameters
@@ -650,7 +634,6 @@ class BMaxMinHeuristic(_Objective):
         V : float
 
         """
-        params, constants = self._parse_args(*args, **kwargs)
         if constants is None:
             constants = self._constants
         data = compute_fun(
@@ -699,12 +682,13 @@ class GradB(_Objective):
 
     def __init__(
         self,
-        eq=None,
+        eq,
         target=None,
         bounds=None,
         weight=1,
         normalize=False,
         normalize_target=False,
+        loss_function=None,
         grid=None,
         a_minor=None,
         B_target=None,
@@ -718,16 +702,17 @@ class GradB(_Objective):
         self.B_target = B_target
         self.threshold = threshold
         super().__init__(
-            eq=eq,
+            things=eq,
             target=target,
             bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
+            loss_function=loss_function,
             name=name,
         )
 
-    def build(self, eq=None, use_jit=True, verbose=1):
+    def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -740,7 +725,7 @@ class GradB(_Objective):
             Level of output.
 
         """
-        eq = eq or self._eq
+        eq = self.things[0]
         if self._grid is None:
             grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, rho=[1.0], NFP=eq.NFP)
         else:
@@ -748,11 +733,6 @@ class GradB(_Objective):
 
         self._dim_f = grid.num_nodes
         self._data_keys = ["sqrt(g)", "|grad(B)|"]
-        self._args = get_params(
-            self._data_keys,
-            obj="desc.equilibrium.equilibrium.Equilibrium",
-            has_axis=grid.axis.size,
-        )
 
         timer = Timer()
         if verbose > 0:
@@ -770,9 +750,9 @@ class GradB(_Objective):
         if verbose > 1:
             timer.disp("Precomputing transforms")
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, *args, **kwargs):
+    def compute(self, params, constants=None):
         """Compute objective
 
         Parameters
@@ -787,7 +767,6 @@ class GradB(_Objective):
         V : float
 
         """
-        params, constants = self._parse_args(*args, **kwargs)
         if constants is None:
             constants = self._constants
         data = compute_fun(
