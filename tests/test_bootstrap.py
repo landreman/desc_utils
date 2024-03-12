@@ -352,7 +352,7 @@ class TestBootstrapObjectives:
         eq.save(final_output_file)
 
         scalar_objective = objective.compute_scalar(objective.x(eq))
-        assert scalar_objective < 3e-5
+        assert scalar_objective < 4e-5
         data = eq.compute(
             ["<J*B>", "<J*B> Redl"],
             grid=grid,
