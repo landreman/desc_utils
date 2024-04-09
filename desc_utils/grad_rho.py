@@ -127,6 +127,7 @@ class GradRho0(_Objective):
             "vol_profiles": vol_profiles,
             "surf_transforms": surf_transforms,
             "surf_profiles": surf_profiles,
+            "transforms": surf_transforms,  # Desc expects this key, even though I don't use it.
         }
 
         timer.stop("Precomputing transforms")
