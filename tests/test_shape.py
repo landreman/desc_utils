@@ -46,6 +46,7 @@ def test_axisymmetry_barrier_value():
         )
 
         np.testing.assert_allclose(scalar_objective, should_be)
+        assert obj.objectives[0]._coordinates == ""
 
     for R_threshold in [0, 0.5, 2.2]:
         for Z_threshold in [0, 0.6, 1.9]:

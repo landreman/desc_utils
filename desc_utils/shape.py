@@ -4,7 +4,7 @@ from desc.compute import (
     get_profiles,
     get_transforms,
 )
-from desc.objectives.objective_funs import _Objective
+from desc.objectives.objective_funs import _Objective, collect_docs
 from desc.utils import Timer
 
 
@@ -17,28 +17,18 @@ class AxisymmetryBarrier(_Objective):
     ----------
     eq : Equilibrium, optional
         Equilibrium that will be optimized to satisfy the Objective.
-    target : float, ndarray, optional
-        Target value(s) of the objective.
-        len(target) must be equal to Objective.dim_f
-    weight : float, ndarray, optional
-        Weighting to apply to the Objective, relative to other Objectives.
-        len(weight) must be equal to Objective.dim_f
-    normalize : bool
-        Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool
-        Whether target should be normalized before comparing to computed values.
-        if `normalize` is `True` and the target is in physical units, this should also
-        be set to True.
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
-    name : str
-        Name of the objective function.
     R_threshold: float
     Z_threshold: float
 
     """
+    __doc__ = __doc__.rstrip() + collect_docs(
+        normalize_detail=" Note: Has no effect for this objective.",
+        normalize_target_detail=" Note: Has no effect for this objective.",
+    )
 
-    _scalar = True
+    _scalar = False
     _units = "(dimensionless)"
     _print_value_fmt = "Axisymmetry barrier: "
 
@@ -51,8 +41,10 @@ class AxisymmetryBarrier(_Objective):
         normalize=False,
         normalize_target=False,
         loss_function=None,
+        deriv_mode="auto",
         grid=None,
         name="Axisymmetry barrier",
+        jac_chunk_size=None,
         R_threshold=0.0,
         Z_threshold=0.0,
     ):
@@ -71,7 +63,9 @@ class AxisymmetryBarrier(_Objective):
             normalize=normalize,
             normalize_target=normalize_target,
             loss_function=loss_function,
+            deriv_mode=deriv_mode,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -79,8 +73,6 @@ class AxisymmetryBarrier(_Objective):
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
@@ -139,10 +131,11 @@ class AxisymmetryBarrier(_Objective):
 
         Parameters
         ----------
-        R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
-        Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
 
         Returns
         -------

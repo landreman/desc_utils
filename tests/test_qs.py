@@ -40,6 +40,8 @@ def test_quasisymmetry_resolution():
         print(
             f"obj: {scalar_objective:11.9g}  helicity: {helicity_N}  grid: {grid_type}  L: {L}  M: {M}  N: {N}"
         )
+        assert obj.objectives[0]._coordinates == ""
+        np.testing.assert_allclose(obj.objectives[0]._constants["quad_weights"], 1)
         return scalar_objective
 
     # Loop over grid trypes. For LinearGrid we need to drop the point at rho=0 to avoid a divide-by-0
@@ -51,7 +53,8 @@ def test_quasisymmetry_resolution():
     kwargss = [{}]
 
     # Loop over grid resolutions:
-    Ls = [8, 16, 8, 16, 8]
+    # Ls = [8, 16, 8, 16, 8]
+    Ls = [16, 32, 16, 32, 16]
     Ms = [8, 8, 16, 16, 8]
     Ns = [8, 8, 8, 8, 16]
 
@@ -100,6 +103,8 @@ def test_QA_QH():
         print(
             f"obj: {scalar_objective:11.9g}  file: {filename}  helicity_n: {helicity_n}"
         )
+        assert obj.objectives[0]._coordinates == ""
+        np.testing.assert_allclose(obj.objectives[0]._constants["quad_weights"], 1)
         return scalar_objective
 
     results = []
@@ -154,6 +159,8 @@ def test_independent_of_size_and_B():
         scalar_objective = obj.compute_scalar(obj.x(eq))
         print(f"obj: {scalar_objective:11.9g}  file: {filename}")
         assert np.abs(scalar_objective) > 0.01
+        assert obj.objectives[0]._coordinates == ""
+        np.testing.assert_allclose(obj.objectives[0]._constants["quad_weights"], 1)
         return scalar_objective
 
     results = []
