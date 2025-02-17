@@ -10,7 +10,7 @@ from desc.compute import get_profiles, get_transforms
 from desc.grid import LinearGrid
 from desc.utils import Timer
 
-from desc.objectives.objective_funs import _Objective
+from desc.objectives.objective_funs import _Objective, collect_docs
 
 
 class BootstrapRedlConsistencyNormalized(_Objective):
@@ -52,28 +52,14 @@ class BootstrapRedlConsistencyNormalized(_Objective):
         quasi-helical symmetry.
     eq : Equilibrium, optional
         Equilibrium that will be optimized to satisfy the Objective.
-    target : float, ndarray, optional
-        Target value(s) of the objective. Only used if bounds is None.
-        len(target) must be equal to Objective.dim_f
-    bounds : tuple, optional
-        Lower and upper bounds on the objective. Overrides target.
-        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
-    weight : float, ndarray, optional
-        Weighting to apply to the Objective, relative to other Objectives.
-        len(weight) must be equal to Objective.dim_f
-    normalize : bool
-        Whether to compute the error in physical units or non-dimensionalize.
-        Note: Has no effect for this objective.
-    normalize_target : bool
-        Whether target and bounds should be normalized before comparing to computed
-        values. If `normalize` is `True` and the target is in physical units,
-        this should also be set to True. Note: Has no effect for this objective.
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
-    name : str
-        Name of the objective function.
 
     """
+    __doc__ = __doc__.rstrip() + collect_docs(
+        normalize_detail=" Note: Has no effect for this objective.",
+        normalize_target_detail=" Note: Has no effect for this objective.",
+    )
 
     _scalar = False
     _units = "(dimensionless)"
@@ -89,8 +75,10 @@ class BootstrapRedlConsistencyNormalized(_Objective):
         normalize=False,
         normalize_target=False,
         loss_function=None,
+        deriv_mode="auto",
         grid=None,
         name="Bootstrap current self-consistency (Redl)",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -107,7 +95,9 @@ class BootstrapRedlConsistencyNormalized(_Objective):
             normalize=normalize,
             normalize_target=normalize_target,
             loss_function=loss_function,
+            deriv_mode=deriv_mode,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -203,6 +193,14 @@ class BootstrapRedlConsistencyNormalized(_Objective):
     def compute(self, params, constants=None):
         """Compute the bootstrap current self-consistency objective.
 
+        Parameters
+        ----------
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+            
         Returns
         -------
         obj : ndarray
