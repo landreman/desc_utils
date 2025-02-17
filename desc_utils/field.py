@@ -7,7 +7,7 @@ from desc.compute import (
 from desc.integrals import surface_averages
 # from desc.compute.utils import surface_averages
 from desc.grid import LinearGrid
-from desc.objectives.objective_funs import _Objective
+from desc.objectives.objective_funs import _Objective, collect_docs
 
 # from desc.objectives import ObjectiveFromUser
 from desc.utils import Timer
@@ -48,28 +48,16 @@ class BTarget(_Objective):
     ----------
     eq : Equilibrium, optional
         Equilibrium that will be optimized to satisfy the Objective.
-    target : float, ndarray, optional
-        Target value(s) of the objective. len(target) must be equal to
-        Objective.dim_f
-    weight : float, ndarray, optional
-        Weighting to apply to the Objective, relative to other Objectives.
-        len(weight) must be equal to Objective.dim_f
-    normalize : bool
-        Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool
-        Whether target should be normalized before comparing to computed values.
-        if `normalize` is `True` and the target is in physical units, this
-        should also be set to True.
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
-    a_minor : float
-        Reference value of the minor radius, typically the target value.
-    name : str
-        Name of the objective function.
-    threshold: float
-        k in the formula above
+    B_target: float, ndarray
+        Target field strength
 
     """
+    __doc__ = __doc__.rstrip() + collect_docs(
+        normalize_detail=" Note: Has no effect for this objective.",
+        normalize_target_detail=" Note: Has no effect for this objective.",
+    )
 
     _scalar = False
     _units = "(dimensionless)"
@@ -84,9 +72,10 @@ class BTarget(_Objective):
         normalize=False,
         normalize_target=False,
         loss_function=None,
+        deriv_mode="auto",
         grid=None,
-        a_minor=None,
         name="BTarget",
+        jac_chunk_size=None,
         B_target=0.0,
     ):
         if target is None and bounds is None:
@@ -101,7 +90,9 @@ class BTarget(_Objective):
             normalize=normalize,
             normalize_target=normalize_target,
             loss_function=loss_function,
+            deriv_mode=deriv_mode,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -149,14 +140,15 @@ class BTarget(_Objective):
 
         Parameters
         ----------
-        R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
-        Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
 
         Returns
         -------
-        V : float
+        f : float
 
         """
         if constants is None:
@@ -186,24 +178,14 @@ class BContourAngle(_Objective):
     ----------
     eq : Equilibrium, optional
         Equilibrium that will be optimized to satisfy the Objective.
-    target : float, ndarray, optional
-        Target value(s) of the objective. len(target) must be equal to
-        Objective.dim_f
-    weight : float, ndarray, optional
-        Weighting to apply to the Objective, relative to other Objectives.
-        len(weight) must be equal to Objective.dim_f
-    normalize : bool
-        Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool
-        Whether target should be normalized before comparing to computed values.
-        if `normalize` is `True` and the target is in physical units, this
-        should also be set to True.
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
-    name : str
-        Name of the objective function.
 
     """
+    __doc__ = __doc__.rstrip() + collect_docs(
+        normalize_detail=" Note: Has no effect for this objective.",
+        normalize_target_detail=" Note: Has no effect for this objective.",
+    )
 
     _scalar = False
     _units = "(dimensionless)"
@@ -218,8 +200,10 @@ class BContourAngle(_Objective):
         normalize=False,
         normalize_target=False,
         loss_function=None,
+        deriv_mode="auto",
         grid=None,
         name="BContourAngle",
+        jac_chunk_size=None,
         regularization=0.001,
         dBdzeta_denom_fac=1.0,
     ):
@@ -235,8 +219,10 @@ class BContourAngle(_Objective):
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
+            deriv_mode=deriv_mode,
             loss_function=loss_function,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -261,7 +247,7 @@ class BContourAngle(_Objective):
         self._dim_f = grid.num_nodes
         self._data_keys = [
             "iota",
-            "B0",
+            "(psi_r/sqrt(g))_r",
             "B_theta",
             "B_zeta",
             "|B|_t",
@@ -296,10 +282,11 @@ class BContourAngle(_Objective):
 
         Parameters
         ----------
-        R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
-        Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
 
         Returns
         -------
@@ -319,7 +306,7 @@ class BContourAngle(_Objective):
 
         B2 = data["|B|"] ** 2
 
-        B_cross_grad_modB_dot_grad_psi = data["B0"] * (
+        B_cross_grad_modB_dot_grad_psi = data["(psi_r/sqrt(g))_r"] * (
             data["B_theta"] * data["|B|_z"] - data["B_zeta"] * data["|B|_t"]
         )
 
@@ -376,6 +363,10 @@ class dBdThetaHeuristic(_Objective):
         "rational", "exp", or "exp2"
 
     """
+    __doc__ = __doc__.rstrip() + collect_docs(
+        normalize_detail=" Note: Has no effect for this objective.",
+        normalize_target_detail=" Note: Has no effect for this objective.",
+    )
 
     _scalar = False
     _units = "(dimensionless)"
@@ -390,8 +381,10 @@ class dBdThetaHeuristic(_Objective):
         normalize=False,
         normalize_target=False,
         loss_function=None,
+        deriv_mode="auto",
         grid=None,
         name="dBdThetaHeuristic",
+        jac_chunk_size=None,
         sharpness=1.0,
         weight_func="exp",
     ):
@@ -426,7 +419,9 @@ class dBdThetaHeuristic(_Objective):
             normalize=normalize,
             normalize_target=normalize_target,
             loss_function=loss_function,
+            deriv_mode=deriv_mode,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -451,7 +446,7 @@ class dBdThetaHeuristic(_Objective):
         self._dim_f = grid.num_nodes
         self._data_keys = [
             "iota",
-            "B0",
+            "(psi_r/sqrt(g))_r",
             "B_theta",
             "B_zeta",
             "|B|_t",
@@ -486,14 +481,15 @@ class dBdThetaHeuristic(_Objective):
 
         Parameters
         ----------
-        R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
-        Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
 
         Returns
         -------
-        V : float
+        f : float
 
         """
         if constants is None:
@@ -509,7 +505,7 @@ class dBdThetaHeuristic(_Objective):
 
         B2 = data["|B|"] ** 2
 
-        B_cross_grad_modB_dot_grad_psi = data["B0"] * (
+        B_cross_grad_modB_dot_grad_psi = data["(psi_r/sqrt(g))_r"] * (
             data["B_theta"] * data["|B|_z"] - data["B_zeta"] * data["|B|_t"]
         )
 
@@ -547,6 +543,10 @@ class BMaxMinHeuristic(_Objective):
     Set weight = 1 / B_typical
 
     """
+    __doc__ = __doc__.rstrip() + collect_docs(
+        normalize_detail=" Note: Has no effect for this objective.",
+        normalize_target_detail=" Note: Has no effect for this objective.",
+    )
 
     _scalar = False
     _units = "(dimensionless)"
@@ -561,8 +561,10 @@ class BMaxMinHeuristic(_Objective):
         normalize=False,
         normalize_target=False,
         loss_function=None,
+        deriv_mode="auto",
         grid=None,
         name="BMaxMinHeuristic",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -575,7 +577,9 @@ class BMaxMinHeuristic(_Objective):
             normalize=normalize,
             normalize_target=normalize_target,
             loss_function=loss_function,
+            deriv_mode=deriv_mode,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -625,14 +629,15 @@ class BMaxMinHeuristic(_Objective):
 
         Parameters
         ----------
-        R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
-        Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
 
         Returns
         -------
-        V : float
+        f : float
 
         """
         if constants is None:
@@ -676,6 +681,10 @@ class GradB(_Objective):
         k in the formula above.
 
     """
+    __doc__ = __doc__.rstrip() + collect_docs(
+        normalize_detail=" Note: Has no effect for this objective.",
+        normalize_target_detail=" Note: Has no effect for this objective.",
+    )
 
     _scalar = False
     _units = "(dimensionless)"
@@ -690,10 +699,12 @@ class GradB(_Objective):
         normalize=False,
         normalize_target=False,
         loss_function=None,
+        deriv_mode="auto",
         grid=None,
+        name="|grad B|",
+        jac_chunk_size=None,
         a_minor=None,
         B_target=None,
-        name="|grad B|",
         threshold=0.0,
     ):
         if target is None and bounds is None:
@@ -710,7 +721,9 @@ class GradB(_Objective):
             normalize=normalize,
             normalize_target=normalize_target,
             loss_function=loss_function,
+            deriv_mode=deriv_mode,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -758,14 +771,15 @@ class GradB(_Objective):
 
         Parameters
         ----------
-        R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
-        Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
 
         Returns
         -------
-        V : float
+        f : float
 
         """
         if constants is None:
