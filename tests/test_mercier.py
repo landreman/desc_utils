@@ -40,12 +40,14 @@ def test_mercier_resolution():
         print(
             f"obj: {scalar_objective:11.9g}  grid: {grid_type}  L: {L}  M: {M}  N: {N}"
         )
+        assert obj.objectives[0]._coordinates == ""
+        np.testing.assert_allclose(obj.objectives[0]._constants["quad_weights"], 1)
         return scalar_objective
 
     grid_types = [QuadratureGrid]
     kwargss = [{}]
 
-    Ls = [16, 32, 16, 32, 16]
+    Ls = [32, 64, 32, 64, 32]
     Ms = [16, 16, 32, 32, 16]
     Ns = [16, 16, 16, 16, 32]
 
@@ -128,6 +130,8 @@ def test_mercier_value():
             np.testing.assert_allclose(
                 scalar_objective, expected, rtol=1e-8, atol=1e-15
             )
+            assert obj.objectives[0]._coordinates == ""
+            np.testing.assert_allclose(obj.objectives[0]._constants["quad_weights"], 1)
 
             return scalar_objective
 
@@ -191,6 +195,8 @@ def test_mercier_matches_well():
             f"threshold: {threshold}  obj: {scalar_objective:11.9g}  expected: {expected}  rel diff: {rel_diff}"
         )
         np.testing.assert_allclose(scalar_objective, expected, rtol=1e-2)
+        assert obj.objectives[0]._coordinates == ""
+        np.testing.assert_allclose(obj.objectives[0]._constants["quad_weights"], 1)
 
         return scalar_objective
 
@@ -227,6 +233,8 @@ def test_independent_of_size_and_B():
         scalar_objective = obj.compute_scalar(obj.x(eq))
         print(f"obj: {scalar_objective:11.9g}  file: {filename}")
         assert np.abs(scalar_objective) > 0.0001
+        assert obj.objectives[0]._coordinates == ""
+        np.testing.assert_allclose(obj.objectives[0]._constants["quad_weights"], 1)
         return scalar_objective
 
     results = []

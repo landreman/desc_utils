@@ -40,6 +40,8 @@ def test_magwell_resolution():
         print(
             f"obj: {scalar_objective:11.9g}  grid: {grid_type}  L: {L}  M: {M}  N: {N}"
         )
+        assert obj.objectives[0]._coordinates == ""
+        np.testing.assert_allclose(obj.objectives[0]._constants["quad_weights"], 1)
         return scalar_objective
 
     # Loop over grid trypes. For LinearGrid we need to drop the point at rho=0 to avoid a divide-by-0
@@ -51,15 +53,8 @@ def test_magwell_resolution():
     kwargss = [{}]
 
     # Loop over grid resolutions:
-    # Ls = [8, 16, 8, 16, 8]
-    # Ms = [8, 8, 16, 16, 8]
-    # Ns = [8, 8, 8, 8, 16]
 
-    # Ls = [16, 32, 16, 32, 16]
-    # Ms = [8, 8, 16, 16, 8]
-    # Ns = [8, 8, 8, 8, 16]
-
-    Ls = [16, 32, 16, 32, 16]
+    Ls = [32, 64, 32, 64, 32]
     Ms = [16, 16, 32, 32, 16]
     Ns = [16, 16, 16, 16, 32]
 
@@ -85,7 +80,7 @@ def test_magwell_value():
 
     eq = desc.io.load(filename)
     grid = QuadratureGrid(
-        L=8,
+        L=16,
         M=8,
         N=8,
         NFP=eq.NFP,
@@ -113,6 +108,8 @@ def test_magwell_value():
             print(f"  expected: {expected}  rel diff: {rel_diff}")
             np.testing.assert_allclose(scalar_objective, expected, rtol=0.013)
 
+        assert obj.objectives[0]._coordinates == ""
+        np.testing.assert_allclose(obj.objectives[0]._constants["quad_weights"], 1)
         return scalar_objective
 
     thresholds = [0, 0.06, -0.06, 0.12, -0.12]
@@ -148,6 +145,8 @@ def test_independent_of_size_and_B():
         scalar_objective = obj.compute_scalar(obj.x(eq))
         print(f"obj: {scalar_objective:11.9g}  file: {filename}")
         assert np.abs(scalar_objective) > 0.01
+        assert obj.objectives[0]._coordinates == ""
+        np.testing.assert_allclose(obj.objectives[0]._constants["quad_weights"], 1)
         return scalar_objective
 
     results = []

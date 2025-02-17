@@ -130,7 +130,7 @@ class MeanIota(_Objective):
         if constants is None:
             constants = self._constants
         data = compute_fun(
-            self.things[0],
+            "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
             params=params,
             transforms=constants["transforms"],
@@ -271,7 +271,7 @@ class IotaAt(_Objective):
         if constants is None:
             constants = self._constants
         data = compute_fun(
-            self.things[0],
+            "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
             params=params,
             transforms=constants["transforms"],

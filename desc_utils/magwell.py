@@ -5,7 +5,7 @@ from desc.compute import (
     get_transforms,
 )
 from desc.grid import QuadratureGrid
-from desc.objectives.objective_funs import _Objective
+from desc.objectives.objective_funs import _Objective, collect_docs
 from desc.utils import Timer
 
 
@@ -20,28 +20,18 @@ class MagneticWellThreshold(_Objective):
     ----------
     eq : Equilibrium, optional
         Equilibrium that will be optimized to satisfy the Objective.
-    target : float, ndarray, optional
-        Target value(s) of the objective.
-        len(target) must be equal to Objective.dim_f
-    weight : float, ndarray, optional
-        Weighting to apply to the Objective, relative to other Objectives.
-        len(weight) must be equal to Objective.dim_f
-    normalize : bool
-        Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool
-        Whether target should be normalized before comparing to computed values.
-        if `normalize` is `True` and the target is in physical units, this should also
-        be set to True.
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
-    name : str
-        Name of the objective function.
     threshold: float
         Set to a negative number to provide some margin
 
     """
+    __doc__ = __doc__.rstrip() + collect_docs(
+        normalize_detail=" Note: Has no effect for this objective.",
+        normalize_target_detail=" Note: Has no effect for this objective.",
+    )
 
-    _scalar = True
+    _scalar = False
     _units = "(dimensionless)"
     _print_value_fmt = "Magnetic well objective: "
 
@@ -54,8 +44,10 @@ class MagneticWellThreshold(_Objective):
         normalize=False,
         normalize_target=False,
         loss_function=None,
+        deriv_mode="auto",
         grid=None,
         name="V''(s)",
+        jac_chunk_size=None,
         threshold=0.0,
     ):
         if target is None and bounds is None:
@@ -70,7 +62,9 @@ class MagneticWellThreshold(_Objective):
             normalize=normalize,
             normalize_target=normalize_target,
             loss_function=loss_function,
+            deriv_mode=deriv_mode,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -120,10 +114,12 @@ class MagneticWellThreshold(_Objective):
 
         Parameters
         ----------
-        R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
-        Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
+        params : dict
+            Dictionary of equilibrium or surface degrees of freedom,
+            eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
 
         Returns
         -------
