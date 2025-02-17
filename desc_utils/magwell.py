@@ -43,7 +43,7 @@ class MagneticWellThreshold(_Objective):
 
     _scalar = True
     _units = "(dimensionless)"
-    _print_value_fmt = "Magnetic well objective: {:10.3e} "
+    _print_value_fmt = "Magnetic well objective: "
 
     def __init__(
         self,

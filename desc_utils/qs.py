@@ -43,7 +43,7 @@ class QuasisymmetryTwoTermNormalized(_Objective):
 
     _scalar = False
     _units = "(dimensionless)"
-    _print_value_fmt = "Quasisymmetry error: {:10.3e} "
+    _print_value_fmt = "Quasisymmetry error: "
 
     def __init__(
         self,

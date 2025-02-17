@@ -7,7 +7,7 @@ from desc.compute import (
     get_transforms,
 )
 from desc.grid import LinearGrid, QuadratureGrid
-from desc.objectives.objective_funs import _Objective
+from desc.objectives.objective_funs import _Objective, collect_docs
 from desc.utils import Timer
 
 
@@ -20,29 +20,21 @@ class MeanIota(_Objective):
     ----------
     eq : Equilibrium, optional
         Equilibrium that will be optimized to satisfy the Objective.
-    target : float, ndarray, optional
-        Target value(s) of the objective.
-        len(target) must be equal to Objective.dim_f == grid.num_rho
-    weight : float, ndarray, optional
-        Weighting to apply to the Objective, relative to other Objectives.
-        len(weight) must be equal to Objective.dim_f == grid.num_rho
-    normalize : bool
-        Whether to compute the error in physical units or non-dimensionalize.
-        Note: has no effect for this objective.
-    normalize_target : bool
-        Whether target should be normalized before comparing to computed values.
-        if `normalize` is `True` and the target is in physical units, this should also
-        be set to True.
-        Note: has no effect for this objective.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
-    name : str
-        Name of the objective function.
     """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=1``.",
+        bounds_default="``target=1``.",
+        normalize_detail=" Note: Has no effect for this objective.",
+        normalize_target_detail=" Note: Has no effect for this objective.",
+        loss_detail=" Note: Has no effect for this objective.",
+    )
 
     _scalar = True
     _units = "(dimensionless)"
-    _print_value_fmt = "Mean rotational transform: {:10.3e} "
+    _print_value_fmt = "Mean rotational transform: "
 
     def __init__(
         self,
@@ -53,11 +45,13 @@ class MeanIota(_Objective):
         normalize=False,
         normalize_target=False,
         loss_function=None,
+        deriv_mode="auto",
         grid=None,
         name="mean rotational transform",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
-            target = 0
+            target = 1
         self._grid = grid
         super().__init__(
             things=eq,
@@ -67,7 +61,9 @@ class MeanIota(_Objective):
             normalize=normalize,
             normalize_target=normalize_target,
             loss_function=loss_function,
+            deriv_mode=deriv_mode,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -89,7 +85,6 @@ class MeanIota(_Objective):
                 M=eq.M_grid,
                 N=eq.N_grid,
                 NFP=eq.NFP,
-                sym=eq.sym,
             )
         else:
             grid = self._grid
@@ -120,18 +115,12 @@ class MeanIota(_Objective):
 
         Parameters
         ----------
-        R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
-        Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
-        L_lmn : ndarray
-            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
-        i_l : ndarray
-            Spectral coefficients of iota(rho) -- rotational transform profile.
-        c_l : ndarray
-            Spectral coefficients of I(rho) -- toroidal current profile.
-        Psi : float
-            Total toroidal magnetic flux within the last closed flux surface (Wb).
+        params : dict
+            Dictionary of equilibrium or surface degrees of freedom, eg
+            Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
 
         Returns
         -------
@@ -141,7 +130,7 @@ class MeanIota(_Objective):
         if constants is None:
             constants = self._constants
         data = compute_fun(
-            "desc.equilibrium.equilibrium.Equilibrium",
+            self.things[0],
             self._data_keys,
             params=params,
             transforms=constants["transforms"],
@@ -166,29 +155,21 @@ class IotaAt(_Objective):
     ----------
     eq : Equilibrium, optional
         Equilibrium that will be optimized to satisfy the Objective.
-    target : float, ndarray, optional
-        Target value(s) of the objective.
-        len(target) must be equal to Objective.dim_f == grid.num_rho
-    weight : float, ndarray, optional
-        Weighting to apply to the Objective, relative to other Objectives.
-        len(weight) must be equal to Objective.dim_f == grid.num_rho
-    normalize : bool
-        Whether to compute the error in physical units or non-dimensionalize.
-        Note: has no effect for this objective.
-    normalize_target : bool
-        Whether target should be normalized before comparing to computed values.
-        if `normalize` is `True` and the target is in physical units, this should also
-        be set to True.
-        Note: has no effect for this objective.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
-    name : str
-        Name of the objective function.
     """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=1``.",
+        bounds_default="``target=1``.",
+        normalize_detail=" Note: Has no effect for this objective.",
+        normalize_target_detail=" Note: Has no effect for this objective.",
+        loss_detail=" Note: Has no effect for this objective.",
+    )
 
     _scalar = True
     _units = "(dimensionless)"
-    _print_value_fmt = "Rotational transform: {:10.3e} "
+    _print_value_fmt = "Rotational transform: "
 
     def __init__(
         self,
@@ -199,11 +180,13 @@ class IotaAt(_Objective):
         normalize=False,
         normalize_target=False,
         loss_function=None,
+        deriv_mode="auto",
         grid=None,
         name="rotational transform",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
-            target = 0
+            target = 1
         self._grid = grid
         super().__init__(
             things=eq,
@@ -213,7 +196,9 @@ class IotaAt(_Objective):
             normalize=normalize,
             normalize_target=normalize_target,
             loss_function=loss_function,
+            deriv_mode=deriv_mode,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -235,7 +220,6 @@ class IotaAt(_Objective):
                 M=eq.M_grid,
                 N=eq.N_grid,
                 NFP=eq.NFP,
-                sym=eq.sym,
             )
         else:
             grid = self._grid
@@ -272,18 +256,12 @@ class IotaAt(_Objective):
 
         Parameters
         ----------
-        R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
-        Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
-        L_lmn : ndarray
-            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
-        i_l : ndarray
-            Spectral coefficients of iota(rho) -- rotational transform profile.
-        c_l : ndarray
-            Spectral coefficients of I(rho) -- toroidal current profile.
-        Psi : float
-            Total toroidal magnetic flux within the last closed flux surface (Wb).
+        params : dict
+            Dictionary of equilibrium or surface degrees of freedom, eg
+            Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
 
         Returns
         -------
@@ -293,7 +271,7 @@ class IotaAt(_Objective):
         if constants is None:
             constants = self._constants
         data = compute_fun(
-            "desc.equilibrium.equilibrium.Equilibrium",
+            self.things[0],
             self._data_keys,
             params=params,
             transforms=constants["transforms"],

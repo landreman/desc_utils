@@ -45,6 +45,8 @@ def test_grad_rho0_resolution():
         obj.build()
         scalar_objective = obj.compute_scalar(obj.x(eq))
         print(f"obj: {scalar_objective:11.9g}  L: {L}  M: {M}  N: {N}")
+        assert obj.objectives[0]._coordinates == ""
+        np.testing.assert_allclose(obj.objectives[0]._constants["quad_weights"], 1)
         return scalar_objective
 
     # Loop over grid resolutions:
@@ -111,6 +113,8 @@ def test_grad_rho0_value():
             print(f"  expected: {expected}  rel diff: {rel_diff}")
             np.testing.assert_allclose(scalar_objective, expected, rtol=1e-4)
 
+        assert obj.objectives[0]._coordinates == ""
+        np.testing.assert_allclose(obj.objectives[0]._constants["quad_weights"], 1)
         return scalar_objective
 
     thresholds = [-1.1, 0, 0.5, 1.3, 5.1]
@@ -153,6 +157,8 @@ def test_grad_rho0_independent_of_size_and_B():
         scalar_objective = obj.compute_scalar(obj.x(eq))
         print(f"obj: {scalar_objective:11.9g}  file: {filename}")
         assert np.abs(scalar_objective) > 0.01
+        assert obj.objectives[0]._coordinates == ""
+        np.testing.assert_allclose(obj.objectives[0]._constants["quad_weights"], 1)
         return scalar_objective
 
     results = []
@@ -196,6 +202,8 @@ def test_grad_rho_resolution():
         obj.build()
         scalar_objective = obj.compute_scalar(obj.x(eq))
         print(f"obj: {scalar_objective:11.9g}  L: {L}  M: {M}  N: {N}")
+        assert obj.objectives[0]._coordinates == ""
+        np.testing.assert_allclose(obj.objectives[0]._constants["quad_weights"], 1)
         return scalar_objective
 
     # Loop over grid resolutions:
@@ -257,6 +265,8 @@ def test_grad_rho_value():
             print(f"  expected: {expected}  rel diff: {rel_diff}")
             np.testing.assert_allclose(scalar_objective, expected, rtol=1e-4)
 
+        assert obj.objectives[0]._coordinates == ""
+        np.testing.assert_allclose(obj.objectives[0]._constants["quad_weights"], 1)
         return scalar_objective
 
     thresholds = [-1.1, 0, 0.5, 1.3, 5.1]
@@ -294,6 +304,8 @@ def test_grad_rho_independent_of_size_and_B():
         scalar_objective = obj.compute_scalar(obj.x(eq))
         print(f"obj: {scalar_objective:11.9g}  file: {filename}")
         assert np.abs(scalar_objective) > 0.01
+        assert obj.objectives[0]._coordinates == ""
+        np.testing.assert_allclose(obj.objectives[0]._constants["quad_weights"], 1)
         return scalar_objective
 
     results = []

@@ -4,7 +4,8 @@ from desc.compute import (
     get_profiles,
     get_transforms,
 )
-from desc.compute.utils import surface_averages
+from desc.integrals import surface_averages
+# from desc.compute.utils import surface_averages
 from desc.grid import LinearGrid
 from desc.objectives.objective_funs import _Objective
 
@@ -72,7 +73,7 @@ class BTarget(_Objective):
 
     _scalar = False
     _units = "(dimensionless)"
-    _print_value_fmt = "B_target: {:10.3e} "
+    _print_value_fmt = "B_target: "
 
     def __init__(
         self,
@@ -206,7 +207,7 @@ class BContourAngle(_Objective):
 
     _scalar = False
     _units = "(dimensionless)"
-    _print_value_fmt = "BContourAngle: {:10.3e} "
+    _print_value_fmt = "BContourAngle: "
 
     def __init__(
         self,
@@ -378,7 +379,7 @@ class dBdThetaHeuristic(_Objective):
 
     _scalar = False
     _units = "(dimensionless)"
-    _print_value_fmt = "dBdThetaHeuristic: {:10.3e} "
+    _print_value_fmt = "dBdThetaHeuristic: "
 
     def __init__(
         self,
@@ -549,7 +550,7 @@ class BMaxMinHeuristic(_Objective):
 
     _scalar = False
     _units = "(dimensionless)"
-    _print_value_fmt = "BMaxMinHeuristic: {:10.3e} "
+    _print_value_fmt = "BMaxMinHeuristic: "
 
     def __init__(
         self,
@@ -678,7 +679,7 @@ class GradB(_Objective):
 
     _scalar = False
     _units = "(dimensionless)"
-    _print_value_fmt = "|grad B| penalty: {:10.3e} "
+    _print_value_fmt = "|grad B| penalty: "
 
     def __init__(
         self,

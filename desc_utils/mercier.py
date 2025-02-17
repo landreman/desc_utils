@@ -70,7 +70,7 @@ class MercierThreshold(_Objective):
     """
 
     _units = "(dimensionless)"
-    _print_value_fmt = "Mercier threshold objective: {:10.3e} "
+    _print_value_fmt = "Mercier threshold objective: "
 
     def __init__(
         self,

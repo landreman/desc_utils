@@ -37,14 +37,12 @@ def test_mean_iota_resolution():
         obj.build()
         scalar_objective = obj.compute_scalar(obj.x(eq))
         print(f"obj: {scalar_objective:11.9g}  L: {L}  M: {M}  N: {N}")
+        assert obj.objectives[0]._coordinates == ""
+        np.testing.assert_allclose(obj.objectives[0]._constants["quad_weights"], 1)
         return scalar_objective
 
     # Loop over grid resolutions:
-    # Ls = [8, 16, 8, 16, 8]
-    # Ms = [8, 8, 16, 16, 8]
-    # Ns = [8, 8, 8, 8, 16]
-
-    Ls = [16, 32, 16, 32, 16]
+    Ls = [32, 64, 32, 64, 32]
     Ms = [16, 16, 32, 32, 16]
     Ns = [16, 16, 16, 16, 32]
 
@@ -66,7 +64,7 @@ def test_mean_iota_value():
     eq = desc.io.load(filename)
 
     grid = QuadratureGrid(
-        L=16,
+        L=32,
         M=16,
         N=16,
         NFP=eq.NFP,
@@ -92,6 +90,8 @@ def test_mean_iota_value():
             f"expected: {expected}  rel diff: {rel_diff}"
         )
         np.testing.assert_allclose(scalar_objective, expected, rtol=1e-2)
+        assert obj.objectives[0]._coordinates == ""
+        np.testing.assert_allclose(obj.objectives[0]._constants["quad_weights"], 1)
 
         return scalar_objective
 
@@ -127,6 +127,8 @@ def test_iota_at_resolution():
         obj.build()
         scalar_objective = obj.compute_scalar(obj.x(eq))
         print(f"obj: {scalar_objective:11.9g}  M: {M}  N: {N}")
+        assert obj.objectives[0]._coordinates == ""
+        np.testing.assert_allclose(obj.objectives[0]._constants["quad_weights"], 1)
         return scalar_objective
 
     # Loop over grid resolutions:
@@ -181,6 +183,8 @@ def test_iota_at_value():
             f"expected: {expected}  rel diff: {rel_diff}"
         )
         np.testing.assert_allclose(scalar_objective, expected, rtol=1e-2)
+        assert obj.objectives[0]._coordinates == ""
+        np.testing.assert_allclose(obj.objectives[0]._constants["quad_weights"], 1)
 
         return scalar_objective
 

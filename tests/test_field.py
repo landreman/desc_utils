@@ -4,7 +4,8 @@ import pytest
 import desc.io
 from desc.grid import LinearGrid, QuadratureGrid
 from desc.objectives import *
-from desc.compute.utils import surface_averages
+from desc.integrals import surface_averages
+# from desc.compute.utils import surface_averages
 
 from desc_utils import (
     BTarget,

@@ -40,7 +40,7 @@ class AxisymmetryBarrier(_Objective):
 
     _scalar = True
     _units = "(dimensionless)"
-    _print_value_fmt = "Axisymmetry barrier: {:10.3e} "
+    _print_value_fmt = "Axisymmetry barrier: "
 
     def __init__(
         self,
