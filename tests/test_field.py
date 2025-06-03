@@ -237,7 +237,7 @@ def test_BContourAngle_resolution_and_value():
         data = eq.compute(
             [
                 "iota",
-                "(psi_r/sqrt(g))_r",
+                "psi_r/sqrt(g)",
                 "B_theta",
                 "B_zeta",
                 "|B|_t",
@@ -251,7 +251,7 @@ def test_BContourAngle_resolution_and_value():
             grid=grid,
         )
 
-        B_cross_grad_B_dot_grad_psi = data["(psi_r/sqrt(g))_r"] * (
+        B_cross_grad_B_dot_grad_psi = data["psi_r/sqrt(g)"] * (
             -data["B_zeta"] * data["|B|_t"] + data["B_theta"] * data["|B|_z"]
         )
 
@@ -367,7 +367,7 @@ def test_dBdThetaHeuristic_resolution_and_value():
         data = eq.compute(
             [
                 "iota",
-                "(psi_r/sqrt(g))_r",
+                "psi_r/sqrt(g)",
                 "B_theta",
                 "B_zeta",
                 "|B|_t",
@@ -381,7 +381,7 @@ def test_dBdThetaHeuristic_resolution_and_value():
             grid=grid,
         )
 
-        B_cross_grad_B_dot_grad_psi = data["(psi_r/sqrt(g))_r"] * (
+        B_cross_grad_B_dot_grad_psi = data["psi_r/sqrt(g)"] * (
             -data["B_zeta"] * data["|B|_t"] + data["B_theta"] * data["|B|_z"]
         )
 

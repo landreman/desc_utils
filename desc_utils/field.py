@@ -247,7 +247,7 @@ class BContourAngle(_Objective):
         self._dim_f = grid.num_nodes
         self._data_keys = [
             "iota",
-            "(psi_r/sqrt(g))_r",
+            "psi_r/sqrt(g)",
             "B_theta",
             "B_zeta",
             "|B|_t",
@@ -306,7 +306,7 @@ class BContourAngle(_Objective):
 
         B2 = data["|B|"] ** 2
 
-        B_cross_grad_modB_dot_grad_psi = data["(psi_r/sqrt(g))_r"] * (
+        B_cross_grad_modB_dot_grad_psi = data["psi_r/sqrt(g)"] * (
             data["B_theta"] * data["|B|_z"] - data["B_zeta"] * data["|B|_t"]
         )
 
@@ -446,7 +446,7 @@ class dBdThetaHeuristic(_Objective):
         self._dim_f = grid.num_nodes
         self._data_keys = [
             "iota",
-            "(psi_r/sqrt(g))_r",
+            "psi_r/sqrt(g)",
             "B_theta",
             "B_zeta",
             "|B|_t",
@@ -505,7 +505,7 @@ class dBdThetaHeuristic(_Objective):
 
         B2 = data["|B|"] ** 2
 
-        B_cross_grad_modB_dot_grad_psi = data["(psi_r/sqrt(g))_r"] * (
+        B_cross_grad_modB_dot_grad_psi = data["psi_r/sqrt(g)"] * (
             data["B_theta"] * data["|B|_z"] - data["B_zeta"] * data["|B|_t"]
         )
 
