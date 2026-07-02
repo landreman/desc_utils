@@ -371,6 +371,7 @@ class dBdThetaHeuristic(_Objective):
     _scalar = False
     _units = "(dimensionless)"
     _print_value_fmt = "dBdThetaHeuristic: "
+    _static_attrs = _Objective._static_attrs + ["weight_function", "sharpness"]
 
     def __init__(
         self,

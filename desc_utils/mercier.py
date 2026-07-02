@@ -63,6 +63,7 @@ class MercierThreshold(_Objective):
     _scalar = False
     _units = "(dimensionless)"
     _print_value_fmt = "Mercier threshold objective: "
+    _static_attrs = _Objective._static_attrs + ["Mercier_term", "threshold"]
 
     def __init__(
         self,

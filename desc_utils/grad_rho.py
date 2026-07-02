@@ -37,6 +37,11 @@ class GradRho0(_Objective):
     _scalar = False
     _units = "(dimensionless)"
     _print_value_fmt = "|grad rho| penalty: "
+    _static_attrs = _Objective._static_attrs + [
+        "_surf_data_keys",
+        "_vol_data_keys",
+        "threshold",
+    ]
 
     def __init__(
         self,
