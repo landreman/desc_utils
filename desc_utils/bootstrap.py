@@ -1,16 +1,13 @@
 """Objectives related to the bootstrap current profile."""
 
-import warnings
-
 import numpy as np
 
 from desc.backend import jnp
-from desc.compute import compute as compute_fun
 from desc.compute import get_profiles, get_transforms
+from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid
-from desc.utils import Timer
-
 from desc.objectives.objective_funs import _Objective, collect_docs
+from desc.utils import Timer, errorif, warnif
 
 
 class BootstrapRedlConsistencyNormalized(_Objective):
@@ -45,18 +42,24 @@ class BootstrapRedlConsistencyNormalized(_Objective):
 
     Parameters
     ----------
-    helicity : 2-element tuple
-        First entry must be 1. Second entry is the toroidal mode number of
-        quasisymmetry, used for evaluating the Redl bootstrap current
-        formula. Set to 0 for axisymmetry or quasi-axisymmetry; set to +/- NFP for
-        quasi-helical symmetry.
     eq : Equilibrium, optional
         Equilibrium that will be optimized to satisfy the Objective.
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
+    helicity : tuple, optional
+        Type of quasi-symmetry (M, N). Default = quasi-axisymmetry (1, 0).
+        First entry must be M=1. Second entry is the toroidal mode number N,
+        used for evaluating the Redl bootstrap current formula. Set to 0 for
+        axisymmetry or quasi-axisymmetry; set to +/-NFP for quasi-helical symmetry.
+    degree : int, optional
+        The `degree` kwarg to pass to the `<J*B>_Redl` compute call, which
+        controls the degree of polynomial fit to the Redl current derivative
+        before it is integrated.
 
     """
     __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.",
+        bounds_default="``target=0``.",
         normalize_detail=" Note: Has no effect for this objective.",
         normalize_target_detail=" Note: Has no effect for this objective.",
     )
@@ -68,7 +71,6 @@ class BootstrapRedlConsistencyNormalized(_Objective):
     def __init__(
         self,
         eq,
-        helicity=(1, 0),
         target=None,
         bounds=None,
         weight=1,
@@ -77,6 +79,8 @@ class BootstrapRedlConsistencyNormalized(_Objective):
         loss_function=None,
         deriv_mode="auto",
         grid=None,
+        helicity=(1, 0),
+        degree=None,
         name="Bootstrap current self-consistency (Redl)",
         jac_chunk_size=None,
     ):
@@ -85,8 +89,9 @@ class BootstrapRedlConsistencyNormalized(_Objective):
         assert (len(helicity) == 2) and (int(helicity[1]) == helicity[1])
         assert helicity[0] == 1, "Redl bootstrap current model assumes helicity[0] == 1"
 
-        self.helicity = helicity
         self._grid = grid
+        self.helicity = helicity
+        self._degree = degree
         super().__init__(
             things=eq,
             target=target,
@@ -105,8 +110,6 @@ class BootstrapRedlConsistencyNormalized(_Objective):
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
@@ -125,52 +128,106 @@ class BootstrapRedlConsistencyNormalized(_Objective):
         else:
             grid = self._grid
 
-        assert (
-            self.helicity[1] == 0 or abs(self.helicity[1]) == eq.NFP
-        ), "Helicity toroidal mode number should be 0 (QA) or +/- NFP (QH)"
+        warnif(
+            (grid.num_theta * (1 + eq.sym)) < 2 * eq.M,
+            RuntimeWarning,
+            "BootstrapRedlConsistencyNormalized objective grid requires poloidal "
+            "resolution for surface averages",
+        )
+        warnif(
+            grid.num_zeta < 2 * eq.N,
+            RuntimeWarning,
+            "BootstrapRedlConsistencyNormalized objective grid requires toroidal "
+            "resolution for surface averages",
+        )
+
+        errorif(
+            not (self.helicity[1] == 0 or abs(self.helicity[1]) == eq.NFP),
+            ValueError,
+            "Helicity toroidal mode number should be 0 (QA) or +/- NFP (QH)",
+        )
+        errorif(
+            grid.axis.size,
+            ValueError,
+            "Redl formula is undefined at rho=0, but grid has grid points at rho=0",
+        )
+
         self._dim_f = grid.num_rho
         self._data_keys = ["<J*B>", "<J*B> Redl"]
 
-        if eq.electron_temperature is None:
-            raise RuntimeError(
-                "Bootstrap current calculation requires an electron temperature "
-                "profile."
-            )
-        if eq.electron_density is None:
-            raise RuntimeError(
-                "Bootstrap current calculation requires an electron density profile."
-            )
-        if eq.ion_temperature is None:
-            raise RuntimeError(
-                "Bootstrap current calculation requires an ion temperature profile."
-            )
+        errorif(
+            eq.electron_temperature is None,
+            RuntimeError,
+            "Bootstrap current calculation requires an electron temperature "
+            "profile.",
+        )
+        errorif(
+            eq.electron_density is None,
+            RuntimeError,
+            "Bootstrap current calculation requires an electron density profile.",
+        )
+        errorif(
+            eq.ion_temperature is None,
+            RuntimeError,
+            "Bootstrap current calculation requires an ion temperature profile.",
+        )
 
-        # Try to catch cases in which density or temperatures are specified in the
-        # wrong units. Densities should be ~ 10^20, temperatures are ~ 10^3.
-        rho = eq.compute("rho", grid=grid)["rho"]
-        if jnp.any(eq.electron_temperature(rho) > 50e3):
-            warnings.warn(
-                "Electron temperature is surprisingly high. It should have units of eV"
-            )
-        if jnp.any(eq.ion_temperature(rho) > 50e3):
-            warnings.warn(
-                "Ion temperature is surprisingly high. It should have units of eV"
-            )
-        # Profiles may go to 0 at rho=1, so exclude the last few grid points from lower
-        # bounds:
+        rho = grid.compress(grid.nodes[:, 0], "rho")
+
+        errorif(
+            np.any(np.isclose(eq.electron_density(rho), 0.0, atol=1e-8)),
+            ValueError,
+            "Redl formula is undefined where kinetic profiles vanish, "
+            "but given electron density vanishes at at least one provided"
+            "rho grid point.",
+        )
+        errorif(
+            np.any(np.isclose(eq.electron_temperature(rho), 0.0, atol=1e-8)),
+            ValueError,
+            "Redl formula is undefined where kinetic profiles vanish, "
+            "but given electron temperature vanishes at at least one provided"
+            "rho grid point.",
+        )
+        errorif(
+            np.any(np.isclose(eq.ion_temperature(rho), 0.0, atol=1e-8)),
+            ValueError,
+            "Redl formula is undefined where kinetic profiles vanish, "
+            "but given ion temperature vanishes at at least one provided"
+            "rho grid point.",
+        )
+        warnif(
+            jnp.any(eq.electron_density(rho) > 1e22),
+            UserWarning,
+            "Electron density is surprisingly high. It should have units of "
+            "1/meters^3",
+        )
+        warnif(
+            jnp.any(eq.electron_temperature(rho) > 50e3),
+            UserWarning,
+            "Electron temperature is surprisingly high. It should have units of eV",
+        )
+        warnif(
+            jnp.any(eq.ion_temperature(rho) > 50e3),
+            UserWarning,
+            "Ion temperature is surprisingly high. It should have units of eV",
+        )
+
         rho = rho[rho < 0.85]
-        if jnp.any(eq.electron_density(rho) < 1e17):
-            warnings.warn(
-                "Electron density is surprisingly low. It should have units 1/meters^3"
-            )
-        if jnp.any(eq.electron_temperature(rho) < 30):
-            warnings.warn(
-                "Electron temperature is surprisingly low. It should have units of eV"
-            )
-        if jnp.any(eq.ion_temperature(rho) < 30):
-            warnings.warn(
-                "Ion temperature is surprisingly low. It should have units of eV"
-            )
+        warnif(
+            jnp.any(eq.electron_density(rho) < 1e17),
+            UserWarning,
+            "Electron density is surprisingly low. It should have units 1/meters^3",
+        )
+        warnif(
+            jnp.any(eq.electron_temperature(rho) < 30),
+            UserWarning,
+            "Electron temperature is surprisingly low. It should have units of eV",
+        )
+        warnif(
+            jnp.any(eq.ion_temperature(rho) < 30),
+            UserWarning,
+            "Ion temperature is surprisingly low. It should have units of eV",
+        )
 
         timer = Timer()
         if verbose > 0:
@@ -182,6 +239,8 @@ class BootstrapRedlConsistencyNormalized(_Objective):
         self._constants = {
             "transforms": transforms,
             "profiles": profiles,
+            "helicity": self._helicity,
+            "degree": self._degree,
         }
 
         timer.stop("Precomputing transforms")
@@ -199,23 +258,23 @@ class BootstrapRedlConsistencyNormalized(_Objective):
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
-            
+            self.constants. (Deprecated)
+
         Returns
         -------
         obj : ndarray
             Bootstrap current self-consistency residual on each rho grid point.
 
         """
-        if constants is None:
-            constants = self._constants
+        constants = self._get_deprecated_constants(constants)
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
             params=params,
             transforms=constants["transforms"],
             profiles=constants["profiles"],
-            helicity=self.helicity,
+            helicity=constants["helicity"],
+            degree=constants["degree"],
         )
         grid = constants["transforms"]["grid"]
         rho_weights = grid.compress(grid.spacing[:, 0])
@@ -227,3 +286,20 @@ class BootstrapRedlConsistencyNormalized(_Objective):
         return grid.compress(
             (data["<J*B>"] - data["<J*B> Redl"]),
         ) * jnp.sqrt(rho_weights / denominator)
+
+    @property
+    def helicity(self):
+        """tuple: Type of quasi-symmetry (M, N)."""
+        return self._helicity
+
+    @helicity.setter
+    def helicity(self, helicity):
+        assert (
+            (len(helicity) == 2)
+            and (int(helicity[0]) == helicity[0])
+            and (int(helicity[1]) == helicity[1])
+        )
+        assert helicity[0] == 1, "Redl bootstrap current model assumes helicity[0] == 1"
+        if hasattr(self, "_helicity") and self._helicity != helicity:
+            self._built = False
+        self._helicity = helicity

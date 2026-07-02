@@ -1,14 +1,11 @@
 """Objectives related to rotational transform"""
 
 from desc.backend import jnp
-from desc.compute import compute as compute_fun
-from desc.compute import (
-    get_profiles,
-    get_transforms,
-)
+from desc.compute import get_profiles, get_transforms
+from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid, QuadratureGrid
 from desc.objectives.objective_funs import _Objective, collect_docs
-from desc.utils import Timer
+from desc.utils import Timer, errorif, warnif
 
 
 class MeanIota(_Objective):
@@ -71,8 +68,6 @@ class MeanIota(_Objective):
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
@@ -88,6 +83,19 @@ class MeanIota(_Objective):
             )
         else:
             grid = self._grid
+
+        warnif(
+            (eq.iota is None) and ((grid.num_theta * (1 + eq.sym)) < 2 * eq.M),
+            RuntimeWarning,
+            "MeanIota objective grid requires poloidal "
+            "resolution for surface averages",
+        )
+        warnif(
+            (eq.iota is None) and (grid.num_zeta < 2 * eq.N),
+            RuntimeWarning,
+            "MeanIota objective grid requires toroidal "
+            "resolution for surface averages",
+        )
 
         self._dim_f = 1
         self._data_keys = ["iota"]
@@ -120,15 +128,14 @@ class MeanIota(_Objective):
             Equilibrium.params_dict
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
+            self.constants. (Deprecated)
 
         Returns
         -------
         iota : ndarray
             rotational transform on specified flux surfaces.
         """
-        if constants is None:
-            constants = self._constants
+        constants = self._get_deprecated_constants(constants)
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
@@ -206,8 +213,6 @@ class IotaAt(_Objective):
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
@@ -224,11 +229,16 @@ class IotaAt(_Objective):
         else:
             grid = self._grid
 
-        if grid.num_rho > 1:
-            raise ValueError("For IotaAt, grid should have only a single rho value.")
-
-        if not isinstance(grid, LinearGrid):
-            raise ValueError("For IotaAt, grid should be a LinearGrid.")
+        errorif(
+            grid.num_rho > 1,
+            ValueError,
+            "For IotaAt, grid should have only a single rho value.",
+        )
+        errorif(
+            not isinstance(grid, LinearGrid),
+            ValueError,
+            "For IotaAt, grid should be a LinearGrid.",
+        )
 
         self._dim_f = 1
         self._data_keys = ["iota"]
@@ -261,15 +271,14 @@ class IotaAt(_Objective):
             Equilibrium.params_dict
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
+            self.constants. (Deprecated)
 
         Returns
         -------
         iota : ndarray
             rotational transform on specified flux surfaces.
         """
-        if constants is None:
-            constants = self._constants
+        constants = self._get_deprecated_constants(constants)
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,

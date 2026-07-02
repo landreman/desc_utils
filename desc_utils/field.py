@@ -1,36 +1,10 @@
 from desc.backend import jnp
-from desc.compute import compute as compute_fun
-from desc.compute import (
-    get_profiles,
-    get_transforms,
-)
+from desc.compute import get_profiles, get_transforms
+from desc.compute.utils import _compute as compute_fun
 from desc.integrals import surface_averages
-# from desc.compute.utils import surface_averages
 from desc.grid import LinearGrid
 from desc.objectives.objective_funs import _Objective, collect_docs
-
-# from desc.objectives import ObjectiveFromUser
 from desc.utils import Timer
-
-# def B_target(grid=None, target=None, eq=None):
-#     """Return an objective to make field strength equal a target.
-
-#     f = (1 / <B²>) ∫dρ ∫dθ ∫dζ (B - B_target)²
-
-#     where <B²> is the volume average of B²
-#     """
-#     def func(grid, data):
-#         print("Size of |B|:", data["|B|"].shape)
-#         print("Size of target:", target.shape)
-#         print("Size of weights:", grid.weights.shape)
-#         print("Size of <|B|>_rms:", data["<|B|>_rms"].shape)
-#         return (data["|B|"] - target) * jnp.sqrt(grid.weights / (4 * jnp.pi)) / data["<|B|>_rms"]
-
-#     return ObjectiveFromUser(
-#         func,
-#         eq=eq,
-#         grid=grid,
-#     )
 
 
 class BTarget(_Objective):
@@ -55,6 +29,8 @@ class BTarget(_Objective):
 
     """
     __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.",
+        bounds_default="``target=0``.",
         normalize_detail=" Note: Has no effect for this objective.",
         normalize_target_detail=" Note: Has no effect for this objective.",
     )
@@ -62,6 +38,7 @@ class BTarget(_Objective):
     _scalar = False
     _units = "(dimensionless)"
     _print_value_fmt = "B_target: "
+    _static_attrs = _Objective._static_attrs + ["_B_target"]
 
     def __init__(
         self,
@@ -81,7 +58,7 @@ class BTarget(_Objective):
         if target is None and bounds is None:
             target = 0
         self._grid = grid
-        self.B_target = B_target
+        self._B_target = B_target
         super().__init__(
             things=eq,
             target=target,
@@ -100,8 +77,6 @@ class BTarget(_Objective):
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
@@ -144,15 +119,14 @@ class BTarget(_Objective):
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
+            self.constants. (Deprecated)
 
         Returns
         -------
         f : float
 
         """
-        if constants is None:
-            constants = self._constants
+        constants = self._get_deprecated_constants(constants)
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
@@ -162,7 +136,7 @@ class BTarget(_Objective):
         )
         grid = constants["transforms"]["grid"]
 
-        return (data["|B|"] - self.B_target) * jnp.sqrt(
+        return (data["|B|"] - self._B_target) * jnp.sqrt(
             grid.weights / (4 * jnp.pi**2)
         )
 
@@ -183,6 +157,8 @@ class BContourAngle(_Objective):
 
     """
     __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.",
+        bounds_default="``target=0``.",
         normalize_detail=" Note: Has no effect for this objective.",
         normalize_target_detail=" Note: Has no effect for this objective.",
     )
@@ -190,6 +166,10 @@ class BContourAngle(_Objective):
     _scalar = False
     _units = "(dimensionless)"
     _print_value_fmt = "BContourAngle: "
+    _static_attrs = _Objective._static_attrs + [
+        "_regularization",
+        "_dBdzeta_denom_fac",
+    ]
 
     def __init__(
         self,
@@ -210,8 +190,8 @@ class BContourAngle(_Objective):
         if target is None and bounds is None:
             target = 0
         self._grid = grid
-        self.regularization = regularization
-        self.dBdzeta_denom_fac = dBdzeta_denom_fac
+        self._regularization = regularization
+        self._dBdzeta_denom_fac = dBdzeta_denom_fac
         super().__init__(
             things=eq,
             target=target,
@@ -230,8 +210,6 @@ class BContourAngle(_Objective):
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
@@ -286,15 +264,14 @@ class BContourAngle(_Objective):
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
+            self.constants. (Deprecated)
 
         Returns
         -------
         V : float
 
         """
-        if constants is None:
-            constants = self._constants
+        constants = self._get_deprecated_constants(constants)
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
@@ -321,8 +298,8 @@ class BContourAngle(_Objective):
 
         denominator = (
             dB_dtheta**2
-            + self.dBdzeta_denom_fac * dB_dzeta**2
-            + self.regularization * B2
+            + self._dBdzeta_denom_fac * dB_dzeta**2
+            + self._regularization * B2
         )
 
         Vprime = jnp.sum(grid.weights * data["sqrt(g)"])
@@ -364,6 +341,8 @@ class dBdThetaHeuristic(_Objective):
 
     """
     __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.",
+        bounds_default="``target=0``.",
         normalize_detail=" Note: Has no effect for this objective.",
         normalize_target_detail=" Note: Has no effect for this objective.",
     )
@@ -371,7 +350,11 @@ class dBdThetaHeuristic(_Objective):
     _scalar = False
     _units = "(dimensionless)"
     _print_value_fmt = "dBdThetaHeuristic: "
-    _static_attrs = _Objective._static_attrs + ["weight_function", "sharpness"]
+    _static_attrs = _Objective._static_attrs + [
+        "weight_function",
+        "sharpness",
+        "_weight_func_name",
+    ]
 
     def __init__(
         self,
@@ -405,10 +388,13 @@ class dBdThetaHeuristic(_Objective):
 
         if weight_func == "rational":
             self.weight_function = weight_rational
+            self._weight_func_name = "rational"
         elif weight_func == "exp":
             self.weight_function = weight_exp
+            self._weight_func_name = "exp"
         elif weight_func == "exp2":
             self.weight_function = weight_exp2
+            self._weight_func_name = "exp2"
         else:
             raise RuntimeError("Invalid setting for 'function'")
 
@@ -430,8 +416,6 @@ class dBdThetaHeuristic(_Objective):
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
@@ -486,15 +470,14 @@ class dBdThetaHeuristic(_Objective):
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
+            self.constants. (Deprecated)
 
         Returns
         -------
         f : float
 
         """
-        if constants is None:
-            constants = self._constants
+        constants = self._get_deprecated_constants(constants)
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
@@ -545,6 +528,8 @@ class BMaxMinHeuristic(_Objective):
 
     """
     __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.",
+        bounds_default="``target=0``.",
         normalize_detail=" Note: Has no effect for this objective.",
         normalize_target_detail=" Note: Has no effect for this objective.",
     )
@@ -588,8 +573,6 @@ class BMaxMinHeuristic(_Objective):
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
@@ -634,15 +617,14 @@ class BMaxMinHeuristic(_Objective):
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
+            self.constants. (Deprecated)
 
         Returns
         -------
         f : float
 
         """
-        if constants is None:
-            constants = self._constants
+        constants = self._get_deprecated_constants(constants)
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
@@ -683,6 +665,8 @@ class GradB(_Objective):
 
     """
     __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.",
+        bounds_default="``target=0``.",
         normalize_detail=" Note: Has no effect for this objective.",
         normalize_target_detail=" Note: Has no effect for this objective.",
     )
@@ -690,6 +674,11 @@ class GradB(_Objective):
     _scalar = False
     _units = "(dimensionless)"
     _print_value_fmt = "|grad B| penalty: "
+    _static_attrs = _Objective._static_attrs + [
+        "_a_minor",
+        "_B_target",
+        "_threshold",
+    ]
 
     def __init__(
         self,
@@ -711,9 +700,9 @@ class GradB(_Objective):
         if target is None and bounds is None:
             target = 0
         self._grid = grid
-        self.a_minor = a_minor
-        self.B_target = B_target
-        self.threshold = threshold
+        self._a_minor = a_minor
+        self._B_target = B_target
+        self._threshold = threshold
         super().__init__(
             things=eq,
             target=target,
@@ -732,8 +721,6 @@ class GradB(_Objective):
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
@@ -776,15 +763,14 @@ class GradB(_Objective):
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
+            self.constants. (Deprecated)
 
         Returns
         -------
         f : float
 
         """
-        if constants is None:
-            constants = self._constants
+        constants = self._get_deprecated_constants(constants)
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
@@ -796,5 +782,6 @@ class GradB(_Objective):
 
         Vprime = jnp.sum(grid.weights * data["sqrt(g)"])
         return jnp.sqrt(grid.weights * data["sqrt(g)"] / Vprime) * jnp.maximum(
-            0.0, (self.a_minor / self.B_target) * data["|grad(B)|"] - self.threshold
+            0.0,
+            (self._a_minor / self._B_target) * data["|grad(B)|"] - self._threshold,
         )

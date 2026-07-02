@@ -1,14 +1,11 @@
 from scipy.constants import mu_0
 
 from desc.backend import jnp
-from desc.compute import compute as compute_fun
-from desc.compute import (
-    get_profiles,
-    get_transforms,
-)
+from desc.compute import get_profiles, get_transforms
+from desc.compute.utils import _compute as compute_fun
 from desc.grid import QuadratureGrid
 from desc.objectives.objective_funs import _Objective, collect_docs
-from desc.utils import Timer
+from desc.utils import ResolutionWarning, Timer, errorif, warnif
 
 
 def Mercier_normalization(data, Psi):
@@ -56,6 +53,8 @@ class MercierThreshold(_Objective):
     """
 
     __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.",
+        bounds_default="``target=0``.",
         normalize_detail=" Note: Has no effect for this objective.",
         normalize_target_detail=" Note: Has no effect for this objective.",
     )
@@ -63,7 +62,7 @@ class MercierThreshold(_Objective):
     _scalar = False
     _units = "(dimensionless)"
     _print_value_fmt = "Mercier threshold objective: "
-    _static_attrs = _Objective._static_attrs + ["Mercier_term", "threshold"]
+    _static_attrs = _Objective._static_attrs + ["_Mercier_term", "_threshold"]
 
     def __init__(
         self,
@@ -84,11 +83,11 @@ class MercierThreshold(_Objective):
         if target is None and bounds is None:
             target = 0
         self._grid = grid
-        self.threshold = threshold
+        self._threshold = threshold
         if well_only:
-            self.Mercier_term = "D_well"
+            self._Mercier_term = "D_well"
         else:
-            self.Mercier_term = "D_Mercier"
+            self._Mercier_term = "D_Mercier"
 
         super().__init__(
             things=eq,
@@ -108,8 +107,6 @@ class MercierThreshold(_Objective):
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
@@ -126,8 +123,34 @@ class MercierThreshold(_Objective):
             print("build: using supplied grid")
             grid = self._grid
 
+        warnif(
+            (grid.num_theta * (1 + eq.sym)) < 2 * eq.M,
+            ResolutionWarning,
+            "MercierThreshold objective grid requires poloidal "
+            "resolution for surface averages",
+        )
+        warnif(
+            grid.num_zeta < 2 * eq.N,
+            ResolutionWarning,
+            "MercierThreshold objective grid requires toroidal "
+            "resolution for surface averages",
+        )
+        errorif(
+            grid.axis.size,
+            ValueError,
+            "MercierThreshold objective grid should not contain axis, "
+            "as its on-axis limit does not exist",
+        )
+
         self._dim_f = grid.num_rho
-        self._data_keys = [self.Mercier_term, "G", "V", "<|B|>_rms", "p_r", "rho"]
+        self._data_keys = [
+            self._Mercier_term,
+            "G",
+            "V",
+            "<|B|>_rms",
+            "p_r",
+            "rho",
+        ]
 
         timer = Timer()
         if verbose > 0:
@@ -157,7 +180,7 @@ class MercierThreshold(_Objective):
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
+            self.constants. (Deprecated)
 
         Returns
         -------
@@ -165,8 +188,7 @@ class MercierThreshold(_Objective):
             residuals
 
         """
-        if constants is None:
-            constants = self._constants
+        constants = self._get_deprecated_constants(constants)
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
@@ -179,9 +201,9 @@ class MercierThreshold(_Objective):
 
         normalization = Mercier_normalization(data, params["Psi"])
         DMercier_normalized = grid.compress(
-            data[self.Mercier_term] / normalization
+            data[self._Mercier_term] / normalization
         )
 
-        return jnp.maximum(0.0, self.threshold - DMercier_normalized) * jnp.sqrt(
+        return jnp.maximum(0.0, self._threshold - DMercier_normalized) * jnp.sqrt(
             rho_weights
         )

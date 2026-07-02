@@ -1,9 +1,6 @@
 from desc.backend import jnp
-from desc.compute import compute as compute_fun
-from desc.compute import (
-    get_profiles,
-    get_transforms,
-)
+from desc.compute import get_profiles, get_transforms
+from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid, QuadratureGrid
 from desc.objectives.objective_funs import _Objective, collect_docs
 from desc.utils import Timer
@@ -31,7 +28,9 @@ class GradRho0(_Objective):
 
     __doc__ = __doc__.rstrip() + collect_docs(
         target_default="``target=0``.",
-        bounds_default="``target=0``."
+        bounds_default="``target=0``.",
+        normalize_detail=" Note: Has no effect for this objective.",
+        normalize_target_detail=" Note: Has no effect for this objective.",
     )
 
     _scalar = False
@@ -40,7 +39,9 @@ class GradRho0(_Objective):
     _static_attrs = _Objective._static_attrs + [
         "_surf_data_keys",
         "_vol_data_keys",
-        "threshold",
+        "_vol_grid",
+        "_surf_grid",
+        "_threshold",
     ]
 
     def __init__(
@@ -63,7 +64,7 @@ class GradRho0(_Objective):
             target = 0
         self._surf_grid = surf_grid
         self._vol_grid = vol_grid
-        self.threshold = threshold
+        self._threshold = threshold
         super().__init__(
             things=eq,
             target=target,
@@ -82,8 +83,6 @@ class GradRho0(_Objective):
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
@@ -129,7 +128,7 @@ class GradRho0(_Objective):
             "vol_profiles": vol_profiles,
             "surf_transforms": surf_transforms,
             "surf_profiles": surf_profiles,
-            "transforms": surf_transforms,  # Desc expects this key, even though I don't use it.
+            "transforms": surf_transforms,
         }
 
         timer.stop("Precomputing transforms")
@@ -147,15 +146,14 @@ class GradRho0(_Objective):
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
+            self.constants. (Deprecated)
 
         Returns
         -------
         V : float
 
         """
-        if constants is None:
-            constants = self._constants
+        constants = self._get_deprecated_constants(constants)
         vol_data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._vol_data_keys,
@@ -170,13 +168,14 @@ class GradRho0(_Objective):
             transforms=constants["surf_transforms"],
             profiles=constants["surf_profiles"],
         )
-        vol_grid = constants["vol_transforms"]["grid"]
         surf_grid = constants["surf_transforms"]["grid"]
 
         Vprime = jnp.sum(surf_grid.weights * surf_data["sqrt(g)"])
         return jnp.sqrt(
             surf_grid.weights * surf_data["sqrt(g)"] / Vprime
-        ) * jnp.maximum(0.0, vol_data["a"] * surf_data["|grad(rho)|"] - self.threshold)
+        ) * jnp.maximum(
+            0.0, vol_data["a"] * surf_data["|grad(rho)|"] - self._threshold
+        )
 
 
 class GradRho(_Objective):
@@ -208,6 +207,7 @@ class GradRho(_Objective):
     _scalar = False
     _units = "(dimensionless)"
     _print_value_fmt = "|grad rho| penalty: "
+    _static_attrs = _Objective._static_attrs + ["_a_minor", "_threshold"]
 
     def __init__(
         self,
@@ -228,8 +228,8 @@ class GradRho(_Objective):
         if target is None and bounds is None:
             target = 0
         self._grid = grid
-        self.a_minor = a_minor
-        self.threshold = threshold
+        self._a_minor = a_minor
+        self._threshold = threshold
         super().__init__(
             things=eq,
             target=target,
@@ -248,8 +248,6 @@ class GradRho(_Objective):
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
@@ -293,15 +291,14 @@ class GradRho(_Objective):
             Equilibrium.params_dict
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
+            self.constants. (Deprecated)
 
         Returns
         -------
         V : float
 
         """
-        if constants is None:
-            constants = self._constants
+        constants = self._get_deprecated_constants(constants)
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
@@ -313,5 +310,5 @@ class GradRho(_Objective):
 
         Vprime = jnp.sum(grid.weights * data["sqrt(g)"])
         return jnp.sqrt(grid.weights * data["sqrt(g)"] / Vprime) * jnp.maximum(
-            0.0, self.a_minor * data["|grad(rho)|"] - self.threshold
+            0.0, self._a_minor * data["|grad(rho)|"] - self._threshold
         )

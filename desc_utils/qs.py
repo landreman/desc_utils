@@ -1,12 +1,9 @@
 from desc.backend import jnp
-from desc.compute import compute as compute_fun
-from desc.compute import (
-    get_profiles,
-    get_transforms,
-)
+from desc.compute import get_profiles, get_transforms
+from desc.compute.utils import _compute as compute_fun
 from desc.grid import QuadratureGrid
 from desc.objectives.objective_funs import _Objective, collect_docs
-from desc.utils import Timer
+from desc.utils import Timer, warnif
 
 
 class QuasisymmetryTwoTermNormalized(_Objective):
@@ -28,6 +25,8 @@ class QuasisymmetryTwoTermNormalized(_Objective):
     """
 
     __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.",
+        bounds_default="``target=0``.",
         normalize_detail=" Note: Has no effect for this objective.",
         normalize_target_detail=" Note: Has no effect for this objective.",
     )
@@ -47,14 +46,14 @@ class QuasisymmetryTwoTermNormalized(_Objective):
         loss_function=None,
         deriv_mode="auto",
         grid=None,
+        helicity=(1, 0),
         name="QS two-term normalized",
         jac_chunk_size=None,
-        helicity=(1, 0),
     ):
         if target is None and bounds is None:
             target = 0
         self._grid = grid
-        self._helicity = helicity
+        self.helicity = helicity
         super().__init__(
             things=eq,
             target=target,
@@ -68,13 +67,15 @@ class QuasisymmetryTwoTermNormalized(_Objective):
             jac_chunk_size=jac_chunk_size,
         )
 
+        self._print_value_fmt = "Quasi-symmetry ({},{}) two-term error: ".format(
+            self.helicity[0], self.helicity[1]
+        )
+
     def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
@@ -89,6 +90,19 @@ class QuasisymmetryTwoTermNormalized(_Objective):
         else:
             grid = self._grid
 
+        warnif(
+            (grid.num_theta * (1 + eq.sym)) < 2 * eq.M,
+            RuntimeWarning,
+            "QuasisymmetryTwoTermNormalized objective grid requires poloidal "
+            "resolution for surface averages",
+        )
+        warnif(
+            grid.num_zeta < 2 * eq.N,
+            RuntimeWarning,
+            "QuasisymmetryTwoTermNormalized objective grid requires toroidal "
+            "resolution for surface averages",
+        )
+
         self._dim_f = grid.num_nodes
         self._data_keys = ["f_C", "|B|", "sqrt(g)"]
 
@@ -102,6 +116,7 @@ class QuasisymmetryTwoTermNormalized(_Objective):
         self._constants = {
             "transforms": transforms,
             "profiles": profiles,
+            "helicity": self._helicity,
         }
 
         timer.stop("Precomputing transforms")
@@ -119,7 +134,7 @@ class QuasisymmetryTwoTermNormalized(_Objective):
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
+            self.constants. (Deprecated)
 
         Returns
         -------
@@ -127,15 +142,14 @@ class QuasisymmetryTwoTermNormalized(_Objective):
             Quasi-symmetry flux function error at each node.
 
         """
-        if constants is None:
-            constants = self._constants
+        constants = self._get_deprecated_constants(constants)
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
             params=params,
             transforms=constants["transforms"],
             profiles=constants["profiles"],
-            helicity=self._helicity,
+            helicity=constants["helicity"],
         )
         grid = constants["transforms"]["grid"]
 
@@ -150,3 +164,18 @@ class QuasisymmetryTwoTermNormalized(_Objective):
     def helicity(self):
         """tuple: Type of quasi-symmetry (M, N)."""
         return self._helicity
+
+    @helicity.setter
+    def helicity(self, helicity):
+        assert (
+            (len(helicity) == 2)
+            and (int(helicity[0]) == helicity[0])
+            and (int(helicity[1]) == helicity[1])
+        )
+        if hasattr(self, "_helicity") and self._helicity != helicity:
+            self._built = False
+        self._helicity = helicity
+        if hasattr(self, "_print_value_fmt"):
+            self._print_value_fmt = "Quasi-symmetry ({},{}) two-term error: ".format(
+                self.helicity[0], self.helicity[1]
+            )

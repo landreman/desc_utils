@@ -1,12 +1,9 @@
 from desc.backend import jnp
-from desc.compute import compute as compute_fun
-from desc.compute import (
-    get_profiles,
-    get_transforms,
-)
+from desc.compute import get_profiles, get_transforms
+from desc.compute.utils import _compute as compute_fun
 from desc.grid import QuadratureGrid
 from desc.objectives.objective_funs import _Objective, collect_docs
-from desc.utils import Timer
+from desc.utils import ResolutionWarning, Timer, warnif
 
 
 class MagneticWellThreshold(_Objective):
@@ -27,6 +24,8 @@ class MagneticWellThreshold(_Objective):
 
     """
     __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.",
+        bounds_default="``target=0``.",
         normalize_detail=" Note: Has no effect for this objective.",
         normalize_target_detail=" Note: Has no effect for this objective.",
     )
@@ -34,6 +33,7 @@ class MagneticWellThreshold(_Objective):
     _scalar = False
     _units = "(dimensionless)"
     _print_value_fmt = "Magnetic well objective: "
+    _static_attrs = _Objective._static_attrs + ["_threshold"]
 
     def __init__(
         self,
@@ -53,7 +53,7 @@ class MagneticWellThreshold(_Objective):
         if target is None and bounds is None:
             target = 0
         self._grid = grid
-        self.threshold = threshold
+        self._threshold = threshold
         super().__init__(
             things=eq,
             target=target,
@@ -72,8 +72,6 @@ class MagneticWellThreshold(_Objective):
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
@@ -83,10 +81,23 @@ class MagneticWellThreshold(_Objective):
         eq = self.things[0]
         if self._grid is None:
             grid = QuadratureGrid(
-                L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP
+                L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym
             )
         else:
             grid = self._grid
+
+        warnif(
+            (grid.num_theta * (1 + eq.sym)) < 2 * eq.M,
+            ResolutionWarning,
+            "MagneticWellThreshold objective grid requires poloidal "
+            "resolution for surface averages",
+        )
+        warnif(
+            grid.num_zeta < 2 * eq.N,
+            ResolutionWarning,
+            "MagneticWellThreshold objective grid requires toroidal "
+            "resolution for surface averages",
+        )
 
         self._dim_f = grid.num_rho
         self._data_keys = ["V_rr(r)", "V_r(r)", "rho", "V"]
@@ -119,15 +130,14 @@ class MagneticWellThreshold(_Objective):
             eg Equilibrium.params_dict
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
+            self.constants. (Deprecated)
 
         Returns
         -------
         V : float
 
         """
-        if constants is None:
-            constants = self._constants
+        constants = self._get_deprecated_constants(constants)
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
@@ -141,6 +151,6 @@ class MagneticWellThreshold(_Objective):
         d2_volume_d_s2 = grid.compress(
             (data["V_rr(r)"] - data["V_r(r)"] / data["rho"]) / (4 * data["rho"] ** 2),
         )
-        return jnp.maximum(0.0, d2_volume_d_s2 / data["V"] - self.threshold) * jnp.sqrt(
+        return jnp.maximum(0.0, d2_volume_d_s2 / data["V"] - self._threshold) * jnp.sqrt(
             rho_weights
         )

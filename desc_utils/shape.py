@@ -1,11 +1,6 @@
 from desc.backend import jnp
-from desc.compute import compute as compute_fun
-from desc.compute import (
-    get_profiles,
-    get_transforms,
-)
 from desc.objectives.objective_funs import _Objective, collect_docs
-from desc.utils import Timer
+from desc.utils import errorif
 
 
 class AxisymmetryBarrier(_Objective):
@@ -24,6 +19,8 @@ class AxisymmetryBarrier(_Objective):
 
     """
     __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.",
+        bounds_default="``target=0``.",
         normalize_detail=" Note: Has no effect for this objective.",
         normalize_target_detail=" Note: Has no effect for this objective.",
     )
@@ -31,6 +28,12 @@ class AxisymmetryBarrier(_Objective):
     _scalar = False
     _units = "(dimensionless)"
     _print_value_fmt = "Axisymmetry barrier: "
+    _static_attrs = _Objective._static_attrs + [
+        "_R_index",
+        "_Z_index",
+        "_R_threshold",
+        "_Z_threshold",
+    ]
 
     def __init__(
         self,
@@ -51,10 +54,10 @@ class AxisymmetryBarrier(_Objective):
         if target is None and bounds is None:
             target = 0
         self._grid = grid
-        assert R_threshold >= 0
-        assert Z_threshold >= 0
-        self.R_threshold = R_threshold
-        self.Z_threshold = Z_threshold
+        errorif(R_threshold < 0, ValueError, "R_threshold must be non-negative")
+        errorif(Z_threshold < 0, ValueError, "Z_threshold must be non-negative")
+        self._R_threshold = R_threshold
+        self._Z_threshold = Z_threshold
         super().__init__(
             things=eq,
             target=target,
@@ -80,10 +83,6 @@ class AxisymmetryBarrier(_Objective):
 
         """
         eq = self.things[0]
-        # if self.grid is None:
-        #    self.grid = QuadratureGrid(
-        #        L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP
-        #    )
 
         self._dim_f = 2
         self._data_keys = ["R", "Z"]
@@ -95,7 +94,7 @@ class AxisymmetryBarrier(_Objective):
                 index = j
         if index is None:
             raise RuntimeError("Did not find an R mode with m=0 and n=1")
-        self.R_index = index
+        self._R_index = index
 
         index = None
         modes = eq.Z_basis.modes
@@ -104,25 +103,9 @@ class AxisymmetryBarrier(_Objective):
                 index = j
         if index is None:
             raise RuntimeError("Did not find a Z mode with m=0 and n=-1")
-        self.Z_index = index
-        print("R for R_index:", eq.R_lmn[self.R_index])
-        print("Z for Z_index:", eq.Z_lmn[self.Z_index])
-
-        timer = Timer()
-        if verbose > 0:
-            print("Precomputing transforms")
-        timer.start("Precomputing transforms")
-
-        # profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
-        # transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
-        #self._constants = {
-        #    "transforms": transforms,
-        #    "profiles": profiles,
-        #}
-
-        timer.stop("Precomputing transforms")
-        if verbose > 1:
-            timer.disp("Precomputing transforms")
+        self._Z_index = index
+        print("R for R_index:", eq.R_lmn[self._R_index])
+        print("Z for Z_index:", eq.Z_lmn[self._Z_index])
 
         super().build(use_jit=use_jit, verbose=verbose)
 
@@ -135,18 +118,19 @@ class AxisymmetryBarrier(_Objective):
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
+            self.constants. (Deprecated)
 
         Returns
         -------
         V : float
 
         """
-        R001 = params["R_lmn"][self.R_index]
-        Z001 = params["Z_lmn"][self.Z_index]
+        self._get_deprecated_constants(constants)
+        R001 = params["R_lmn"][self._R_index]
+        Z001 = params["Z_lmn"][self._Z_index]
         return jnp.array(
             [
-                jnp.minimum(0.0, jnp.abs(R001) - self.R_threshold),
-                jnp.minimum(0.0, jnp.abs(Z001) - self.Z_threshold),
+                jnp.minimum(0.0, jnp.abs(R001) - self._R_threshold),
+                jnp.minimum(0.0, jnp.abs(Z001) - self._Z_threshold),
             ],
         )
